@@ -8,3 +8,5 @@ __pycache__/           # Python 캐시 파일
 .idea/                 # PyCharm 설정
 .DS_Store             # macOS 시스템 파일
 Thumbs.db             # Windows 썸네일 파일
+.env.docker
+.env.local
