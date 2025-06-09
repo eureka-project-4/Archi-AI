@@ -1,5 +1,11 @@
 # Archi-AI
+실행 순서
+
 pip install -r requirements.txt
+
+.\archi\Scripts\activate
+
+python .\cli_interface.py
 
 archi_chat2.py는
 최근 5개만 불러와서 사용
