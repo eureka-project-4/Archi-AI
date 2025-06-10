@@ -1,12 +1,11 @@
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 import pandas as pd
 import os
 
 from app.config import settings
 
-# 환경별 DB URL 설정
 DATABASE_URL = f"mysql+pymysql://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
 
 engine = create_engine(DATABASE_URL)
@@ -30,3 +29,15 @@ def export_tables_to_csv():
         csv_path = f"./app/data/pricing/{table}.csv"
         df.to_csv(csv_path, index=False, encoding='utf-8')
         print(f"{table} -> {csv_path}")
+
+def main():
+    """DB 초기화 및 CSV export"""
+    Base.metadata.create_all(bind=engine)
+    print("DB 초기화 완료")
+    
+    export_tables_to_csv()
+    print("CSV export 완료")
+    
+    print("모든 작업이 완료되었습니다.")
+if __name__ == "__main__":
+    main()
