@@ -5,7 +5,8 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.api import chat, admin
 from app.core.rag_manager import RAGManager
-
+# from dotenv import load_dotenv
+# load_dotenv(override=True)
 rag_manager = None
 
 @asynccontextmanager
