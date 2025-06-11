@@ -1,6 +1,7 @@
 import redis.asyncio as redis
 import json
 from typing import Dict, Any
+from redis.exceptions import ResponseError
 from app.config import settings
 
 
@@ -23,7 +24,7 @@ class RedisService:
         """초기 1회만 호출하여 Consumer Group을 생성"""
         try:
             await self.redis_client.xgroup_create(stream_name, group_name, id='0', mkstream=True)
-        except redis.exceptions.ResponseError:
+        except ResponseError:
             pass  # 이미 존재
 
     async def consume_messages(self, stream_name: str, group_name: str, consumer_name: str, count: int = 1):
