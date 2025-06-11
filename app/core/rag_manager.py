@@ -65,14 +65,18 @@ class RAGManager:
             print(f"모든 경로에서 CSV 디렉토리를 찾을 수 없습니다")
             print(f"시도한 경로들: {possible_paths}")
         
+
+
+        Path(settings.PRICING_DATA_DIR).mkdir(parents=True, exist_ok=True)
+        Path(settings.VECTOR_STORE_DIR).mkdir(parents=True, exist_ok=True)
+        Path(settings.MEMORY_DIR).mkdir(parents=True, exist_ok=True)
+        
         self.memory_manager = MemoryManager(
             memory_dir=settings.MEMORY_DIR,
             llm=self.llm
         )
         
-        Path(settings.PRICING_DATA_DIR).mkdir(parents=True, exist_ok=True)
-        Path(settings.VECTOR_STORE_DIR).mkdir(parents=True, exist_ok=True)
-        Path(settings.MEMORY_DIR).mkdir(parents=True, exist_ok=True)
+
     
     def initialize(self):
         try:
