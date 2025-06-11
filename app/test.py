@@ -34,12 +34,12 @@ def test_chat_basic(user_id="test_user", message="안녕하세요"):
     return response.status_code == 200
 
 def test_chat_verified(user_id="test_user", message="월 3만원 이하 요금제 추천해주세요"):
-    """검증 기능 포함 채팅 테스트 (/api/chat/verified)"""
+    """검증 기능 포함 채팅 테스트 (/api/chat)"""
     payload = {
         "user_id": user_id,
         "message": message
     }
-    response = requests.post(f"{BASE_URL}/api/chat/verified", json=payload)
+    response = requests.post(f"{BASE_URL}/api/chat", json=payload)
     print(f"\n=== 검증 채팅 테스트 ===")
     print(f"User: {user_id}")
     print(f"Input: {message}")

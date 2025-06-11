@@ -8,48 +8,70 @@ def test_hallucination_prevention():
     """할루시네이션 방지 시스템 테스트"""
     
     test_cases = [
-        {
-            "name": "킹왕짱 요금제 문의",
-            "user_id": "test_user",
-            "message": "킹왕짱 요금제에 대해 설명해줘",
-            "should_block": True,
-            "description": "존재하지 않는 요금제는 차단되어야 함"
-        },
-        {
-            "name": "슈퍼울트라 요금제 문의", 
-            "user_id": "test_user",
-            "message": "슈퍼울트라맥시멈 요금제 추천해주세요",
-            "should_block": True,
-            "description": "가짜 요금제명은 차단되어야 함"
-        },
-        {
-            "name": "메가킹왕짱 플랜 문의",
-            "user_id": "test_user",
-            "message": "메가킹왕짱 플랜은 얼마인가요?",
-            "should_block": True,
-            "description": "창의적인 가짜 요금제명도 차단되어야 함"
-        },
-        {
-            "name": "실제 요금제 문의 (5G)",
-            "user_id": "test_user", 
-            "message": "5G 프리미어 에센셜 요금제는 어떤가요?",
-            "should_block": False,
-            "description": "실제 존재하는 요금제는 정상 처리되어야 함"
-        },
-        {
-            "name": "일반 인사",
-            "user_id": "test_user",
-            "message": "안녕하세요",
-            "should_block": False,
-            "description": "일반적인 대화는 정상 처리되어야 함"
-        },
-        {
-            "name": "요금제 추천 요청",
-            "user_id": "test_user",
-            "message": "월 5만원대 요금제 추천해주세요",
-            "should_block": False,
-            "description": "일반적인 추천 요청은 정상 처리되어야 함"
-        }
+    {
+        "name": "킹왕짱 요금제 문의",
+        "user_id": "test_user",
+        "message": "킹왕짱 요금제에 대해 설명해줘",
+        "should_block": True,
+        "description": "존재하지 않는 요금제는 차단되어야 함",
+        "expected_behavior": "존재하지 않는 요금제로 인식되어야 함"
+    },
+    {
+        "name": "슈퍼울트라 요금제 문의", 
+        "user_id": "test_user",
+        "message": "슈퍼울트라맥시멈 요금제 추천해주세요",
+        "should_block": True,
+        "description": "가짜 요금제명은 차단되어야 함",
+        "expected_behavior": "존재하지 않는 요금제로 인식되어야 함"
+    },
+    {
+        "name": "메가킹왕짱 플랜 문의",
+        "user_id": "test_user",
+        "message": "메가킹왕짱 플랜은 얼마인가요?",
+        "should_block": True,
+        "description": "창의적인 가짜 요금제명도 차단되어야 함",
+        "expected_behavior": "존재하지 않는 요금제로 인식되어야 함"
+    },
+    {
+        "name": "실제 요금제 문의 (5G 프리미어)",
+        "user_id": "test_user", 
+        "message": "5G 프리미어 에센셜 요금제는 어떤가요?",
+        "should_block": False,
+        "description": "실제 존재하는 요금제는 정상 처리되어야 함",
+        "expected_behavior": "정상적으로 요금제 정보 제공"
+    },
+    {
+        "name": "가격대 문의 (5만원대)",
+        "user_id": "test_user",
+        "message": "월 5만원대 요금제 추천해주세요",
+        "should_block": False,
+        "description": "가격대 문의는 정상 처리되어야 함 (요금제명이 아님)",
+        "expected_behavior": "가격대에 맞는 요금제들을 추천해야 함"
+    },
+    {
+        "name": "가격대 문의 (3만원 이하)",
+        "user_id": "test_user",
+        "message": "3만원 이하 저렴한 요금제 있나요?",
+        "should_block": False,
+        "description": "가격대 표현은 요금제명으로 인식하면 안됨",
+        "expected_behavior": "예산에 맞는 요금제 추천"
+    },
+    {
+        "name": "일반 인사",
+        "user_id": "test_user",
+        "message": "안녕하세요",
+        "should_block": False,
+        "description": "일반적인 대화는 정상 처리되어야 함",
+        "expected_behavior": "친근한 인사말 응답"
+    },
+    {
+        "name": "데이터 많은 요금제 문의",
+        "user_id": "test_user",
+        "message": "데이터 많이 쓸 수 있는 요금제 추천해주세요",
+        "should_block": False,
+        "description": "기능 기반 요청은 정상 처리되어야 함",
+        "expected_behavior": "데이터가 많은 요금제들 추천"
+    }
     ]
     
     print("할루시네이션 방지 시스템 테스트 시작")
@@ -289,6 +311,7 @@ def test_performance():
     print(f"성공률: {successful_requests}/{len(queries)*3}")
 
 if __name__ == "__main__":
+    
     print("할루시네이션 방지 시스템 종합 테스트")
     print("=" * 60)
     
