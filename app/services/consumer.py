@@ -7,6 +7,8 @@ from app.services.processor import message_processor
 from app.services.ai_classifier import ai_classifier
 from app.services.content_filter import content_filter
 from app.models.message import AiPromptMessage, MessageType
+from app.models.chat import ChatMessage
+from app.database.session import get_db
 from app.config import settings
 
 class StreamConsumer:
@@ -58,6 +60,10 @@ class StreamConsumer:
             # Pydantic 모델로 변환
             ai_message = AiPromptMessage(**parsed_data)
             
+            # 1. 유저 메시지 DB 저장
+            user_message_id, chat_id = await self._save_user_message(ai_message)
+            print(f"[DB] 유저 메시지 저장 완료 - ID: {user_message_id}, Chat ID: {chat_id}")
+            
             # 0단계: AI 기반 금칙어 필터링
             if await content_filter.contains_forbidden_content(ai_message.payload.content):
                 print(f"[WARN] 금칙어 감지됨: {ai_message.payload.content[:20]}...")
@@ -71,8 +77,16 @@ class StreamConsumer:
                 ai_message.payload.type = classified_type
                 print(f"[INFO] 분류 결과: {classified_type}")
                 
-                # 2단계: 분류된 타입으로 메시지 처리
+                # 2단계: 분류된 타입으로 메시지 처리 (AI 응답 생성)
                 response = await message_processor.process_message(ai_message)
+            
+            # 3. 봇 응답 DB 저장 (content만)
+            bot_message_id = await self._save_bot_response(response, chat_id)
+            print(f"[DB] 봇 응답 저장 완료 - ID: {bot_message_id}")
+            
+            # 4. 응답에 실제 DB ID들 반영
+            response["messageId"] = str(bot_message_id)
+            response["chatId"] = str(chat_id)  # chat_id도 추가
             
             print(f"[INFO] 메시지 처리 완료 - 타입: {response['type']}")
             
@@ -90,10 +104,58 @@ class StreamConsumer:
             print(f"[ERROR] 메시지 처리 실패 - ID: {message_id}, 에러: {e}")
             # 실패한 메시지는 ACK 하지 않음 (재처리 가능)
     
+    async def _save_user_message(self, ai_message: AiPromptMessage) -> tuple[int, int]:
+        """유저 메시지 DB 저장 - (message_id, chat_id) 반환"""
+        async for db in get_db():
+            try:
+                message = ChatMessage(
+                    chat_id=None,  # 저장 후 자동 생성된 ID 사용
+                    user_id=int(ai_message.payload.user_id),
+                    message=ai_message.payload.content,
+                    sender="USER",
+                    created_at=datetime.now(),
+                    message_type=ai_message.payload.type
+                )
+                db.add(message)
+                await db.commit()
+                await db.refresh(message)
+                
+                # chat_id를 message.id로 업데이트
+                message.chat_id = message.id
+                await db.commit()
+                await db.refresh(message)
+                
+                return message.id, message.chat_id
+            except Exception as e:
+                await db.rollback()
+                print(f"[ERROR] 유저 메시지 저장 실패: {e}")
+                raise e
+
+    async def _save_bot_response(self, response: Dict[str, Any], chat_id: int) -> int:
+        """봇 응답 DB 저장 - 기본 content만 저장"""
+        async for db in get_db():
+            try:
+                message = ChatMessage(
+                    chat_id=chat_id,  # 유저 메시지와 같은 chat_id
+                    user_id=int(response["userId"]),
+                    message=response["content"],  # 기본 메시지만 저장
+                    sender="BOT",
+                    created_at=datetime.now(),
+                    message_type=response["type"]
+                )
+                db.add(message)
+                await db.commit()
+                await db.refresh(message)
+                return message.id
+            except Exception as e:
+                await db.rollback()
+                print(f"[ERROR] 봇 응답 저장 실패: {e}")
+                raise e
+    
     async def _create_filtered_response(self, message: AiPromptMessage) -> Dict[str, Any]:
         """금칙어 감지 시 응답 생성"""
         return {
-            "messageId": message.payload.message_id,
+            "messageId": "temp",  # DB 저장 후 덮어씀
             "userId": message.payload.user_id,
             "content": "부적절한 표현이 감지되었습니다. 정중한 언어를 사용해 주세요.",
             "type": MessageType.FILTERED_MESSAGE,
