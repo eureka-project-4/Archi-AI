@@ -20,4 +20,8 @@ class LocalSettings(BaseSettings):
     DEBUG: bool = True
     LOG_LEVEL: str = "INFO"
 
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+
     env_file: ClassVar[str] = ".env"

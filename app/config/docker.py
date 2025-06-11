@@ -21,6 +21,10 @@ class DockerSettings(BaseSettings):
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 50
 
+    REDIS_HOST: str
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+
     ENVIRONMENT: str = "docker"
 
     class Config:
