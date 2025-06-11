@@ -21,7 +21,7 @@ def get_db():
 
 def export_tables_to_csv():
     """DB 테이블들을 CSV로 export"""
-    tables = ["plans", "services", "coupons"]
+    tables = ["plans", "vass", "coupons"]
     os.makedirs("./app/data/pricing", exist_ok=True)
 
     for table in tables:
