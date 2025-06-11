@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
@@ -37,16 +38,12 @@ class RAGManager:
         self.retriever = None
         self.rag_chain = None
         
-        # 핵심 시스템들
         self.message_classifier = MessageClassifier(self.analysis_llm)
         
-        # CSV 검증 시스템 (기존 verification_system 대체)
-        # PRICING_DATA_DIR은 디렉토리이므로 그대로 사용
         pricing_dir = getattr(settings, 'PRICING_DATA_DIR', 'data/pricing')
         
-        # 여러 가능한 경로 시도
         possible_paths = [
-            pricing_dir,  # data/pricing (디렉토리)
+            pricing_dir,
             'data/pricing',
             'app/data/pricing',
             './app/data/pricing'
@@ -58,28 +55,26 @@ class RAGManager:
             if path_obj.exists():
                 try:
                     self.csv_verifier = CSVVerificationSystem(path)
-                    print(f"✅ CSV 검증 시스템 로드: {path}")
+                    print(f"CSV 검증 시스템 로드: {path}")
                     break
                 except Exception as e:
-                    print(f"⚠️ CSV 로드 실패 ({path}): {e}")
+                    print(f"CSV 로드 실패 ({path}): {e}")
                     continue
         
         if not self.csv_verifier:
-            print(f"❌ 모든 경로에서 CSV 디렉토리를 찾을 수 없습니다")
-            print(f"   시도한 경로들: {possible_paths}")
+            print(f"모든 경로에서 CSV 디렉토리를 찾을 수 없습니다")
+            print(f"시도한 경로들: {possible_paths}")
         
         self.memory_manager = MemoryManager(
             memory_dir=settings.MEMORY_DIR,
             llm=self.llm
         )
         
-        # 디렉토리 생성
         Path(settings.PRICING_DATA_DIR).mkdir(parents=True, exist_ok=True)
         Path(settings.VECTOR_STORE_DIR).mkdir(parents=True, exist_ok=True)
         Path(settings.MEMORY_DIR).mkdir(parents=True, exist_ok=True)
     
     def initialize(self):
-        """초기 RAG 시스템 설정"""
         try:
             vector_path = Path(settings.VECTOR_STORE_DIR) / "faiss_index"
             if vector_path.exists():
@@ -88,7 +83,7 @@ class RAGManager:
                     self.embeddings,
                     allow_dangerous_deserialization=True
                 )
-                print("✅ 기존 벡터스토어 로드됨")
+                print("기존 벡터스토어 로드됨")
             else:
                 self._create_vectorstore_from_files()
             
@@ -98,19 +93,18 @@ class RAGManager:
                     search_kwargs={"k": settings.RETRIEVAL_K}
                 )
                 self._setup_chain()
-                print("✅ RAG 체인 설정 완료")
+                print("RAG 체인 설정 완료")
                 
         except Exception as e:
-            print(f"⚠️ RAG 시스템 초기화 오류: {e}")
+            print(f"RAG 시스템 초기화 오류: {e}")
             self.retriever = None
     
     def _create_vectorstore_from_files(self):
-        """데이터 파일들로부터 벡터스토어 생성"""
         pricing_dir = Path(settings.PRICING_DATA_DIR)
         files = list(pricing_dir.glob("*.txt")) + list(pricing_dir.glob("*.csv"))
         
         if not files:
-            print("⚠️ 요금제 데이터 파일이 없습니다.")
+            print("요금제 데이터 파일이 없습니다.")
             return
         
         all_documents = []
@@ -120,7 +114,7 @@ class RAGManager:
                 documents = loader.load()
                 all_documents.extend(documents)
             except Exception as e:
-                print(f"⚠️ 파일 로드 오류 {file_path}: {e}")
+                print(f"파일 로드 오류 {file_path}: {e}")
         
         if all_documents:
             text_splitter = RecursiveCharacterTextSplitter(
@@ -139,10 +133,9 @@ class RAGManager:
             vector_path = Path(settings.VECTOR_STORE_DIR) / "faiss_index"
             self.vectorstore.save_local(str(vector_path))
             
-            print(f"✅ 벡터스토어 생성 완료: {len(splits)}개 청크")
+            print(f"벡터스토어 생성 완료: {len(splits)}개 청크")
     
     def _setup_chain(self):
-        """챗봇 체인 설정"""
         system_prompt = """
         당신은 통신사 요금제 추천 전문가입니다. 
         사용자의 성향과 사용 패턴을 파악하여 가장 적합한 요금제를 추천해주세요.
@@ -177,13 +170,63 @@ class RAGManager:
             self.rag_chain = prompt | self.llm | StrOutputParser()
     
     def load_user_context(self, user_id: str) -> tuple:
-        """사용자 컨텍스트 로드"""
         chat_history, conversation_summary, is_existing_user = self.memory_manager.load_user_memory(user_id)
         return chat_history, conversation_summary, is_existing_user
     
+    def extract_plan_names_from_input(self, text: str) -> List[str]:
+        """사용자 입력에서 요금제명 추출"""
+        plan_names = []
+        
+        patterns = [
+            r'(\S+)\s*요금제',
+            r'요금제\s*(\S+)',
+            r'(\S+\s+\S+)\s*요금제',
+            r'(\S+)\s*플랜',
+            r'(\S+)\s*plan'
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            plan_names.extend(matches)
+        
+        cleaned_names = []
+        for name in plan_names:
+            cleaned = name.strip()
+            if cleaned and len(cleaned) > 1:
+                cleaned_names.append(cleaned)
+        
+        return list(set(cleaned_names))
+    
+    def chat(self, user_id: str, message: str) -> Dict[str, Any]:
+        """기본 채팅 메서드 - 검증 포함"""
+        return self.chat_with_verification(user_id, message)
+    
     def chat_with_verification(self, user_id: str, message: str) -> Dict[str, Any]:
-        """검증 기능이 포함된 채팅 처리"""
         try:
+            asked_plans = self.extract_plan_names_from_input(message)
+            
+            if asked_plans and self.csv_verifier:
+                for plan_name in asked_plans:
+                    verification = self.csv_verifier.verify_plan_exists(plan_name)
+                    
+                    if verification['confidence'] < 0.5:
+                        return {
+                            "response": f"죄송합니다. '{plan_name}' 요금제는 현재 제공되지 않는 요금제입니다. 다른 요금제를 추천해드릴까요?",
+                            "verification_status": "요금제 없음",
+                            "mentioned_plans": [plan_name],
+                            "confidence_score": verification['confidence'],
+                            "message_type": "chat",
+                            "verification_results": {
+                                plan_name: {
+                                    "plan_exists": False,
+                                    "confidence_score": verification['confidence'],
+                                    "match_type": verification['match_type'],
+                                    "evidence": ["CSV 검증: 요금제 없음"]
+                                }
+                            },
+                            "verification_method": "CSV 직접검증"
+                        }
+            
             chat_history, conversation_summary, _ = self.memory_manager.load_user_memory(user_id)
             chat_history_str = self.memory_manager.format_chat_history(chat_history, conversation_summary)
             
@@ -195,7 +238,6 @@ class RAGManager:
                     "confidence_score": 0.0
                 }
             
-            # RAG 체인으로 응답 생성
             if self.retriever:
                 response = self.rag_chain.invoke({
                     "input": message,
@@ -214,17 +256,14 @@ class RAGManager:
                 ai_response = str(response)
                 used_sources = []
             
-            # 메시지 분류
             classification = self.message_classifier.classify_message(message, ai_response)
             message_type = classification["message_type"]
             
-            # CSV 검증으로 언급된 요금제 찾기
             if self.csv_verifier:
                 mentioned_plans = self.csv_verifier.find_mentioned_plans(ai_response)
             else:
-                mentioned_plans = classification["mentioned_plans"]  # 분류기 결과 사용
+                mentioned_plans = classification["mentioned_plans"]
             
-            # CSV 검증 수행
             verification_results = {}
             overall_confidence = 1.0
             
@@ -236,12 +275,11 @@ class RAGManager:
                         "confidence_score": verification['confidence'],
                         "matched_plan": verification['matched_plan']['name'] if verification['matched_plan'] else None,
                         "match_type": verification['match_type'],
-                        "discrepancies": [],  # CSV 검증에서는 별도 계산
+                        "discrepancies": [],
                         "evidence": [f"CSV 직접 검증: {verification['match_type']}"]
                     }
                     overall_confidence = min(overall_confidence, verification['confidence'])
             
-            # 대화 기록 저장
             conversation_entry = {
                 "timestamp": datetime.now().isoformat(),
                 "human": message,
@@ -253,30 +291,26 @@ class RAGManager:
             
             chat_history.append(conversation_entry)
             
-            # 대화 요약 (필요시)
             if len(chat_history) > self.memory_manager.max_conversation_length:
                 chat_history, conversation_summary = self.memory_manager.summarize_old_conversations(
                     user_id, chat_history, conversation_summary
                 )
             
-            # 메모리 저장
             self.memory_manager.save_user_memory(user_id, chat_history, conversation_summary)
             
-            # 검증 결과에 따른 상태 메시지
             if self.csv_verifier:
                 verification_status = self.csv_verifier.get_verification_status_message(overall_confidence)
             else:
                 verification_status = "검증 시스템 없음"
             
-            # 낮은 신뢰도일 때 경고 메시지 추가
             if overall_confidence < 0.7 and mentioned_plans:
-                ai_response += f"\n\n🔍 {verification_status}\n신뢰도: {overall_confidence:.1%}"
+                ai_response += f"\n\n검증 상태: {verification_status}\n신뢰도: {overall_confidence:.1%}"
                 for plan_name, verification in verification_results.items():
                     if verification["confidence_score"] < 0.7:
                         if verification["match_type"] == "no_match":
-                            ai_response += f"\n⚠️ '{plan_name}' - 존재하지 않는 요금제일 수 있습니다"
+                            ai_response += f"\n'{plan_name}' - 존재하지 않는 요금제일 수 있습니다"
                         elif verification["matched_plan"]:
-                            ai_response += f"\n🔄 '{plan_name}' → '{verification['matched_plan']}' (유사한 요금제)"
+                            ai_response += f"\n'{plan_name}' → '{verification['matched_plan']}' (유사한 요금제)"
             
             return {
                 "response": ai_response,
@@ -290,7 +324,7 @@ class RAGManager:
             }
             
         except Exception as e:
-            print(f"⚠️ 채팅 처리 오류: {e}")
+            print(f"채팅 처리 오류: {e}")
             return {
                 "response": f"죄송합니다. 오류가 발생했습니다: {e}",
                 "verification_status": "오류",
@@ -300,7 +334,6 @@ class RAGManager:
             }
     
     def verify_plan_directly(self, plan_name: str) -> Dict[str, Any]:
-        """특정 요금제 직접 검증"""
         if not self.csv_verifier:
             return {"error": "CSV 검증 시스템이 없습니다"}
         
@@ -329,7 +362,6 @@ class RAGManager:
             }
     
     def search_plans_by_criteria(self, criteria: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """조건별 요금제 검색"""
         if not self.csv_verifier:
             return []
         
@@ -350,11 +382,9 @@ class RAGManager:
         ]
     
     def get_user_statistics(self, user_id: str) -> Dict[str, Any]:
-        """사용자 통계 조회"""
         chat_history, conversation_summary, _ = self.memory_manager.load_user_memory(user_id)
         stats = self.memory_manager.get_user_statistics(user_id, chat_history, conversation_summary)
         
-        # 검증 시스템 정보 추가
         stats['verification_system'] = "CSV 직접검증" if self.csv_verifier else "없음"
         if self.csv_verifier:
             stats['total_plans_in_db'] = self.csv_verifier.get_plan_database_info()['total_plans']
@@ -362,15 +392,12 @@ class RAGManager:
         return stats
     
     def list_all_users(self) -> List[Dict[str, Any]]:
-        """모든 사용자 목록 조회"""
         return self.memory_manager.list_all_users()
     
     def delete_user_memory(self, username: str) -> bool:
-        """사용자 메모리 삭제"""
         return self.memory_manager.delete_user_memory(username)
     
     def update_vectorstore(self, file_paths: List[str]) -> dict:
-        """벡터스토어 업데이트 (RAG용)"""
         try:
             result = self._update_vectorstore_internal(file_paths)
             return result
@@ -379,7 +406,6 @@ class RAGManager:
             return {"success": False, "message": f"업데이트 오류: {e}"}
     
     def _update_vectorstore_internal(self, file_paths: List[str]) -> dict:
-        """내부 벡터스토어 업데이트 로직"""
         all_documents = []
         for file_path in file_paths:
             path = Path(file_path)
@@ -388,7 +414,7 @@ class RAGManager:
                 documents = loader.load()
                 all_documents.extend(documents)
             else:
-                print(f"⚠️ 파일을 찾을 수 없습니다: {file_path}")
+                print(f"파일을 찾을 수 없습니다: {file_path}")
         
         if not all_documents:
             return {"success": False, "message": "로드할 문서가 없습니다."}
@@ -422,7 +448,6 @@ class RAGManager:
         }
     
     def update_csv_verification(self, new_csv_path: str) -> dict:
-        """CSV 검증 시스템 업데이트"""
         try:
             if not Path(new_csv_path).exists():
                 return {"success": False, "message": f"CSV 파일을 찾을 수 없습니다: {new_csv_path}"}
@@ -440,7 +465,6 @@ class RAGManager:
             return {"success": False, "message": f"CSV 업데이트 오류: {e}"}
     
     def get_plan_database_info(self) -> Dict[str, Any]:
-        """요금제 데이터베이스 정보 조회"""
         if self.csv_verifier:
             return self.csv_verifier.get_plan_database_info()
         else:
@@ -451,7 +475,6 @@ class RAGManager:
             }
     
     def get_system_status(self) -> Dict[str, Any]:
-        """시스템 전체 상태 조회"""
         return {
             "rag_system": "사용 가능" if self.rag_chain else "사용 불가",
             "vectorstore": "로드됨" if self.vectorstore else "없음",
@@ -461,7 +484,6 @@ class RAGManager:
         }
     
     def generate_verification_report(self, user_id: str, message: str) -> str:
-        """검증 보고서 생성"""
         result = self.chat_with_verification(user_id, message)
         
         report = []

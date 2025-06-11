@@ -36,6 +36,11 @@ def test_scenarios():
             "name": "가족 요금제 문의",
             "user_id": "lee_family",
             "message": "가족 4명이 쓸 수 있는 요금제 있나요?"
+        },
+        {
+            "name": "킹왕짱 요금제 문의",
+            "user_id": "lee",
+            "message": "킹왕짱 요금제에 대해 설명해줘"
         }
     ]
     
