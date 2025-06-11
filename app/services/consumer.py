@@ -53,57 +53,66 @@ class StreamConsumer:
     async def _process_single_message(self, redis_service: RedisService, message_id: str, message_data: Dict[str, str]):
         """개별 메시지 처리"""
         try:
+            print(f"\n[DEBUG] 원본 message_data: {message_data}")
+
             # 메시지 파싱
             parsed_data = redis_service.parse_message(message_data)
             print(f"[INFO] 메시지 수신 - ID: {message_id}")
-            print(f"[DEBUG] 메시지 데이터: {parsed_data}")
-            
-            # Pydantic 모델로 변환
+            print(f"[DEBUG] 파싱된 데이터: {parsed_data}")
+
+            # Pydantic 모델 변환
             ai_message = AiPromptMessage(**parsed_data)
-            
-            # 1. 유저 메시지 DB 저장
+            print(f"[DEBUG] Pydantic 변환 성공 - userId: {ai_message.payload.user_id}, content: {ai_message.payload.content}")
+            print(f"[DEBUG] 초기 type 값: {ai_message.payload.type}")
+
+            # 1. 유저 메시지 저장
+            print(f"[STEP] 유저 메시지 DB 저장 시도")
             chat_id = await self._save_user_message(ai_message)
             print(f"[DB] 유저 메시지 저장 완료 - Chat ID: {chat_id}")
-            
-            # 0단계: AI 기반 금칙어 필터링
+
+            # 0단계: 금칙어 필터링
             if await content_filter.contains_forbidden_content(ai_message.payload.content):
-                print(f"[WARN] 금칙어 감지됨: {ai_message.payload.content[:20]}...")
+                print(f"[WARN] 금칙어 감지됨: {ai_message.payload.content[:30]}")
                 response = await self._create_filtered_response(ai_message)
             else:
-                # 1단계: AI로 메시지 타입 분류
+                # 1단계: 타입 분류
+                print(f"[STEP] 메시지 타입 분류 시도")
                 classified_type = await ai_classifier.classify_message_type(
                     ai_message.payload.content, 
                     ai_message.metadata
                 )
+                print(f"[INFO] 분류된 타입: {classified_type}")
                 ai_message.payload.type = classified_type
-                print(f"[INFO] 분류 결과: {classified_type}")
-                
-                # 2단계: 분류된 타입으로 메시지 처리 (AI 응답 생성)
+
+                # 2단계: 메시지 처리
+                print(f"[STEP] 메시지 처리 시작")
                 response = await message_processor.process_message(ai_message)
-            
-            # 3. 봇 응답 DB 저장 (content만)
+
+            # 3. 봇 응답 저장
+            print(f"[STEP] 봇 응답 DB 저장 시도")
             bot_chat_id = await self._save_bot_response(response, chat_id)
             print(f"[DB] 봇 응답 저장 완료 - Chat ID: {bot_chat_id}")
-            
-            # 4. 응답에 실제 DB ID들 반영
+
+            # 응답 메시지 ID 반영
             response["messageId"] = str(bot_chat_id)
-            response["chatId"] = str(chat_id)  # 유저 메시지의 chat_id
-            
-            print(f"[INFO] 메시지 처리 완료 - 타입: {response['type']}")
-            
-            # 응답 전송
+            response["chatId"] = str(chat_id)
+
+            # 응답 Redis 전송
+            print(f"[STEP] Redis 응답 전송 시도")
             await self._send_response(redis_service, response)
-            
-            # ACK 처리
+            print(f"[INFO] 응답 전송 완료 - 타입: {response['type']}")
+
+            # ACK
+            print(f"[STEP] 메시지 ACK 처리")
             await redis_service.acknowledge_message(
                 settings.REQUEST_STREAM,
                 settings.CONSUMER_GROUP,
                 message_id
             )
-            
+            print(f"[INFO] 메시지 ACK 완료")
+
         except Exception as e:
             print(f"[ERROR] 메시지 처리 실패 - ID: {message_id}, 에러: {e}")
-            # 실패한 메시지는 ACK 하지 않음 (재처리 가능)
     
     async def _save_user_message(self, ai_message: AiPromptMessage) -> int:
         """유저 메시지 DB 저장 - chat_id 반환"""
