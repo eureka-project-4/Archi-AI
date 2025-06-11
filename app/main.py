@@ -9,9 +9,10 @@ from app.core.rag_manager import RAGManager
 from app.services.consumer import stream_consumer
 
 rag_manager = None
-
+print("🔥 Lifespan 함수 진입 전")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print("🔥 Lifespan 진입됨")  # 이게 안 뜨면 진짜 문제
     global rag_manager
     print("🚀 AI 서버 시작 중...")
     
