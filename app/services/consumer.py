@@ -61,8 +61,8 @@ class StreamConsumer:
             ai_message = AiPromptMessage(**parsed_data)
             
             # 1. 유저 메시지 DB 저장
-            user_message_id, chat_id = await self._save_user_message(ai_message)
-            print(f"[DB] 유저 메시지 저장 완료 - ID: {user_message_id}, Chat ID: {chat_id}")
+            chat_id = await self._save_user_message(ai_message)
+            print(f"[DB] 유저 메시지 저장 완료 - Chat ID: {chat_id}")
             
             # 0단계: AI 기반 금칙어 필터링
             if await content_filter.contains_forbidden_content(ai_message.payload.content):
@@ -81,12 +81,12 @@ class StreamConsumer:
                 response = await message_processor.process_message(ai_message)
             
             # 3. 봇 응답 DB 저장 (content만)
-            bot_message_id = await self._save_bot_response(response, chat_id)
-            print(f"[DB] 봇 응답 저장 완료 - ID: {bot_message_id}")
+            bot_chat_id = await self._save_bot_response(response, chat_id)
+            print(f"[DB] 봇 응답 저장 완료 - Chat ID: {bot_chat_id}")
             
             # 4. 응답에 실제 DB ID들 반영
-            response["messageId"] = str(bot_message_id)
-            response["chatId"] = str(chat_id)  # chat_id도 추가
+            response["messageId"] = str(bot_chat_id)
+            response["chatId"] = str(chat_id)  # 유저 메시지의 chat_id
             
             print(f"[INFO] 메시지 처리 완료 - 타입: {response['type']}")
             
@@ -104,12 +104,11 @@ class StreamConsumer:
             print(f"[ERROR] 메시지 처리 실패 - ID: {message_id}, 에러: {e}")
             # 실패한 메시지는 ACK 하지 않음 (재처리 가능)
     
-    async def _save_user_message(self, ai_message: AiPromptMessage) -> tuple[int, int]:
-        """유저 메시지 DB 저장 - (message_id, chat_id) 반환"""
+    async def _save_user_message(self, ai_message: AiPromptMessage) -> int:
+        """유저 메시지 DB 저장 - chat_id 반환"""
         async for db in get_db():
             try:
                 message = ChatMessage(
-                    chat_id=None,  # 저장 후 자동 생성된 ID 사용
                     user_id=int(ai_message.payload.user_id),
                     message=ai_message.payload.content,
                     sender="USER",
@@ -119,13 +118,7 @@ class StreamConsumer:
                 db.add(message)
                 await db.commit()
                 await db.refresh(message)
-                
-                # chat_id를 message.id로 업데이트
-                message.chat_id = message.id
-                await db.commit()
-                await db.refresh(message)
-                
-                return message.id, message.chat_id
+                return message.chat_id  # Primary Key 반환
             except Exception as e:
                 await db.rollback()
                 print(f"[ERROR] 유저 메시지 저장 실패: {e}")
@@ -136,7 +129,6 @@ class StreamConsumer:
         async for db in get_db():
             try:
                 message = ChatMessage(
-                    chat_id=chat_id,  # 유저 메시지와 같은 chat_id
                     user_id=int(response["userId"]),
                     message=response["content"],  # 기본 메시지만 저장
                     sender="BOT",
@@ -146,7 +138,7 @@ class StreamConsumer:
                 db.add(message)
                 await db.commit()
                 await db.refresh(message)
-                return message.id
+                return message.chat_id
             except Exception as e:
                 await db.rollback()
                 print(f"[ERROR] 봇 응답 저장 실패: {e}")
