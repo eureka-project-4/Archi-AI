@@ -1,3 +1,4 @@
+
 import asyncio
 import json
 from typing import Dict, Any
@@ -8,7 +9,7 @@ from app.services.ai_classifier import ai_classifier
 from app.services.content_filter import content_filter
 from app.models.message import AiPromptMessage, MessageType
 from app.models.chat import ChatMessage
-from app.database.session import get_db
+from app.database import get_db  # 수정된 import
 from app.config import settings
 
 class StreamConsumer:
