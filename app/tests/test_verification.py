@@ -1,6 +1,6 @@
 def test_verification_directly():
     """검증 시스템만 단독 테스트"""
-    from .core.csv_verification_system import CSVVerificationSystem
+    from app.core.csv_verification_system import CSVVerificationSystem
     
     csv_verifier = CSVVerificationSystem("./app/data/pricing/plans.csv")
     
