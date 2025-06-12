@@ -1,0 +1,41 @@
+import asyncio
+import json
+from app.services.redis_service import RedisService
+from app.config import settings
+
+async def test_send_message():
+    """Redis로 테스트 메시지 전송"""
+    async with RedisService() as redis:
+        test_message = {
+            "payload": {
+                "user_id": "12345",
+                "content": "5만원 이하 요금제 추천해줘",
+                "message_id": "test-001",
+                "type": None
+            },
+            "metadata": {
+                "age_code": "004",
+                "tag_code": "NORMAL"
+            }
+        }
+        
+        # JSON 형식으로 변환
+        formatted_message = {
+            "payload": json.dumps(test_message["payload"]),
+            "metadata": json.dumps(test_message["metadata"])
+        }
+        
+        message_id = await redis.send_message(settings.REQUEST_STREAM, formatted_message)
+        print(f"메시지 전송됨: {message_id}")
+        
+        # 응답 대기
+        print("응답 대기 중...")
+        await asyncio.sleep(3)
+        
+        # 응답 확인
+        response = await redis.redis_client.xread({settings.RESPONSE_STREAM: "0"}, count=1)
+        if response:
+            print(f"응답 받음: {response}")
+
+if __name__ == "__main__":
+    asyncio.run(test_send_message())

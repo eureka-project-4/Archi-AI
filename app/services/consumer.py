@@ -1,9 +1,8 @@
 
 import asyncio
-import json
 from typing import Dict, Any
 from datetime import datetime, timezone
-from app.services.redis_service import RedisService
+# from app.services.redis_service import RedisService
 from app.services.processor import message_processor
 from app.services.ai_classifier import ai_classifier
 from app.services.content_filter import content_filter
@@ -11,7 +10,7 @@ from app.models.message import AiPromptMessage, MessageType
 from app.models.chat import ChatMessage
 from app.database import get_db  # 수정된 import
 from app.config import settings
-
+from app.services.mock_redis_service import MockRedisService as RedisService
 class StreamConsumer:
     def __init__(self):
         self.running = False

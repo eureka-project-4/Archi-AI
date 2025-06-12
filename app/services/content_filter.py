@@ -1,64 +1,97 @@
 import openai
 from app.config import settings
-#  금칙어 필터링
+from typing import Dict, Any
+
 class ContentFilter:
     def __init__(self):
-        # 현재는 OpenAI 연결만 설정, 실제 호출은 비활성화 상태입니다.
-        openai.api_key = settings.OPENAI_API_KEY
+        self.client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
     
     async def contains_forbidden_content(self, content: str) -> bool:
         """
-        메시지가 욕설/비속어/부적절한 표현을 포함하는지 판단하는 함수입니다.
-
-        [현재 상태]
-        - 테스트 용도로 항상 정상적인 메시지(False)를 반환합니다.
-        - 금칙어 필터링은 비활성화 되어 있습니다.
-
-        [팀원 작업 메모]
-        - 추후 OpenAI API를 사용해 금칙어 필터링을 활성화하려면
-          아래의 `return False` 라인을 주석 처리하고,
-          주석 블록을 해제하면 됩니다.
-        - 응답은 "YES" 또는 "NO" 중 하나로 오며, "YES"일 경우 금칙어 포함으로 처리합니다.
+        OpenAI Moderation API를 사용하여 부적절한 콘텐츠 감지
         """
-        return False  # TODO: 실제 필터링 로직 구현 전까지는 항상 통과 처리
-
-        # 아래는 향후 사용할 실제 OpenAI 기반 금칙어 판별 로직입니다.
-        """
-        prompt = f'''
-        다음 메시지가 욕설, 비속어, 혐오 표현, 부적절한 내용을 포함하는지 판단하세요:
-
-        메시지: "{content}"
-
-        판단 기준:
-        - 직접적인 욕설이나 비속어
-        - 우회적 표현 (ㅅㅂ, sㅣval 등)
-        - 혐오 표현이나 차별적 언어
-        - 성적이거나 폭력적인 내용
-        - 기타 부적절한 표현
-
-        응답은 "YES" 또는 "NO"만 해주세요.
-        YES: 부적절한 내용 포함
-        NO: 정상적인 내용
-        '''
-
         try:
-            response = await openai.ChatCompletion.acreate(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": "당신은 텍스트의 부적절성을 판단하는 AI입니다. 매우 엄격하게 판단하며, 의심스러운 경우 YES로 응답합니다."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=10,
-                temperature=0.1
+            # 최신 omni-moderation-latest 모델 사용
+            response = self.client.moderations.create(
+                model="omni-moderation-latest",
+                input=content
             )
             
-            result = response.choices[0].message.content.strip().upper()
-            return result == "YES"
+            # 결과 분석
+            result = response.results[0]
+            
+            # 하나라도 플래그되면 True 반환
+            is_flagged = result.flagged
+            
+            if is_flagged:
+                # 플래그된 카테고리 확인
+                flagged_categories = []
+                categories = result.categories
+                
+                # 모든 카테고리 체크
+                for category in dir(categories):
+                    if not category.startswith('_') and getattr(categories, category):
+                        flagged_categories.append(category)
+                
+                print(f"[MODERATION] 부적절한 콘텐츠 감지: {flagged_categories}")
+                
+                # 점수 확인 (디버깅용)
+                scores = result.category_scores
+                high_scores = {}
+                for category in dir(scores):
+                    if not category.startswith('_'):
+                        score = getattr(scores, category)
+                        if score > 0.5:
+                            high_scores[category] = score
+                
+                if high_scores:
+                    print(f"[MODERATION] 높은 점수 카테고리: {high_scores}")
+            
+            return is_flagged
             
         except Exception as e:
-            print(f"AI 필터링 실패: {e}")
-            return False  # 오류 시 필터링 우회
+            print(f"[ERROR] Moderation API 오류: {e}")
+            # 오류 시 안전을 위해 False 반환
+            return False
+    
+    async def get_moderation_details(self, content: str) -> Dict[str, Any]:
         """
-
+        상세한 모더레이션 결과 반환 (디버깅용)
+        """
+        try:
+            response = self.client.moderations.create(
+                model="omni-moderation-latest",
+                input=content
+            )
+            
+            result = response.results[0]
+            
+            # Raw 응답 출력
+            print("\n[DEBUG] Raw Moderation Response:")
+            print(f"Model: {response.model}")
+            print(f"ID: {response.id}")
+            
+            # 카테고리별 상세 정보
+            print("\nCategories:")
+            for category in result.categories.__dict__:
+                if not category.startswith('_'):
+                    value = getattr(result.categories, category)
+                    score = getattr(result.category_scores, category)
+                    print(f"  {category}: {value} (score: {score})")
+            
+            return {
+                'flagged': result.flagged,
+                'categories': result.categories,
+                'category_scores': result.category_scores,
+                'model': response.model,
+                'id': response.id
+            }
+            
+        except Exception as e:
+            print(f"[ERROR] Moderation API 오류: {e}")
+            return {
+                'flagged': False,
+                'error': str(e)
+            }
 # 인스턴스 생성
 content_filter = ContentFilter()

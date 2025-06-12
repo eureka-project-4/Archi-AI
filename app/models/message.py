@@ -1,9 +1,8 @@
+from enum import Enum
 from pydantic import BaseModel, Field
 from typing import Optional
-from datetime import datetime
-from enum import Enum
 
-class MessageType(str, Enum):
+class MessageType(Enum):
     USER_MESSAGE = "USER_MESSAGE"
     SUGGESTION = "SUGGESTION"
     KEYWORD_RECOMMENDATION = "KEYWORD_RECOMMENDATION"
@@ -12,32 +11,22 @@ class MessageType(str, Enum):
     GENERAL_RESPONSE = "GENERAL_RESPONSE"
     FILTERED_MESSAGE = "FILTERED_MESSAGE"
 
-class SenderType(str, Enum):
-    USER = "USER"
-    BOT = "BOT"
-
-
 class AuthMetadata(BaseModel):
-    tag_code: int = Field(alias="tagCode")
-    age_code: int = Field(alias="ageCode")
-
+    age_code: str = Field(alias="ageCode")
+    tag_code: str = Field(alias="tagCode")
+    
     class Config:
-        allow_population_by_field_name = True
+        populate_by_name = True 
 
-class ChatMessage(BaseModel):
-    message_id: str = Field(alias="messageId")
+class MessagePayload(BaseModel):
     user_id: str = Field(alias="userId")
     content: str
-    type: MessageType
-    sender: SenderType
-    timestamp: datetime
-
+    message_id: str = Field(alias="messageId")
+    type: Optional[MessageType] = None
+    
     class Config:
-        allow_population_by_field_name = True
+        populate_by_name = True
 
 class AiPromptMessage(BaseModel):
+    payload: MessagePayload
     metadata: AuthMetadata
-    payload: ChatMessage
-
-    class Config:
-        allow_population_by_field_name = True

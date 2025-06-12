@@ -7,9 +7,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
-
+from app.models.message import MessageType
 from message_classifier import MessageClassifier
-# from data_models import MessageType, ChatEntry, HallucinationCheck
 from csv_verification_system import CSVVerificationSystem
 from memory_manager import MemoryManager
 from rag_system import RAGSystem
@@ -357,8 +356,8 @@ class PricingPlanChatbot:
         if not self.current_user:
             return {"error": "로그인이 필요합니다."}
         
-        chat_count = sum(1 for entry in self.chat_history if entry.get("message_type") == "chat")
-        suggestion_count = sum(1 for entry in self.chat_history if entry.get("message_type") == "suggestion")
+        chat_count = sum(1 for entry in self.chat_history if entry.get("message_type") == MessageType.GENERAL_RESPONSE)
+        suggestion_count = sum(1 for entry in self.chat_history if entry.get("message_type") == MessageType.SUGGESTION)
         
         return {
             "user": self.current_user,

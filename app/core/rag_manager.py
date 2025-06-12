@@ -13,7 +13,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.documents import Document
-
+from app.models.message import MessageType
 from app.config import settings
 from app.core.message_classifier import MessageClassifier
 from app.core.csv_verification_system import CSVVerificationSystem
@@ -707,8 +707,8 @@ class RAGManager:
                     conversation_entry = {
                         "timestamp": datetime.now().isoformat(),
                         "human": message,
-                        "ai": response_text,
-                        "message_type": "SUGGESTION",
+                        "ai": ai_response,
+                        "message_type": MessageType.SUGGESTION,  
                         "query_intent": intent
                     }
                     

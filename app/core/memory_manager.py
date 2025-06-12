@@ -5,7 +5,6 @@ from pathlib import Path
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-# from .data_models import ChatEntry, UserMemory
 
 class MemoryManager:
     def __init__(self, memory_dir: str, llm: ChatOpenAI):
