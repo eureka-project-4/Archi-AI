@@ -743,7 +743,7 @@ class RAGManager:
                         return {
                             "response": f"죄송합니다. '{plan_name}' 요금제는 현재 제공되지 않는 요금제입니다. 다른 요금제를 추천해드릴까요?",
                             "user_id": user_id,
-                            "message_type": "blocked",
+                            "message_type": MessageType.BLOCKED_MESSAGE,
                             "mentioned_plans": [plan_name],
                             "confidence_score": verification['confidence'],
                             "verification_status": "차단됨 - 존재하지 않는 요금제",
