@@ -139,6 +139,7 @@ class CSVVerificationSystem:
             return f"{data_value}GB"
     
     def verify_plan_exists(self, plan_name: str) -> Dict:
+        # print(plan_name)
         plan_name_clean = plan_name.strip().lower()
         
         if plan_name_clean in self.plan_database:

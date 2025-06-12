@@ -12,39 +12,33 @@ class VerifiedChatResponse(BaseModel):
     mentioned_plans: list[str] = []
     confidence_score: float = 1.0
     message_type: str = "chat"
+    verification_results: dict = {}
+    verification_method: str = ""
 
 class VerificationReportRequest(BaseModel):
     user_id: str
     message: str
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat", response_model=VerifiedChatResponse)
 async def process_chat(request: ChatRequest):
-    """기본 채팅 메시지 처리 (기존 엔드포인트 유지)"""
+    """기본 채팅 메시지 처리 - 모든 채팅에 검증 적용"""
     
     from app.main import rag_manager
 
     if rag_manager is None:
         raise HTTPException(status_code=500, detail="AI 시스템이 초기화되지 않았습니다.")
     
-    chat_history_str = ""
-    for chat in request.chat_history or []:
-        chat_history_str += f"사용자: {chat.user}\n"
-        chat_history_str += f"챗봇: {chat.assistant}\n"
-    
-    result = rag_manager.chat(
-        user_id=request.user_id,
-        message=request.message,
-        chat_history=chat_history_str
-    )
-    
-    return ChatResponse(
-        response=result.get("response", ""),
-        used_knowledge=result.get("used_knowledge", [])
-    )
+    try:
+        result = rag_manager.chat_with_verification(request.user_id, request.message)
+        
+        return VerifiedChatResponse(**result)
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"채팅 처리 중 오류: {str(e)}")
 
 @router.post("/chat/verified", response_model=VerifiedChatResponse)
 async def process_verified_chat(request: ChatRequest):
-    """검증 기능이 포함된 채팅 메시지 처리"""
+    """검증 기능이 포함된 채팅 메시지 처리 (명시적 엔드포인트)"""
     
     from app.main import rag_manager
 
@@ -104,3 +98,30 @@ async def get_user_stats(user_id: str):
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"통계 조회 중 오류: {str(e)}")
+
+@router.get("/debug/plan-verification/{plan_name}")
+async def debug_plan_verification(plan_name: str):
+    """요금제 검증 디버깅 엔드포인트"""
+    
+    from app.main import rag_manager
+    
+    if rag_manager is None:
+        raise HTTPException(status_code=500, detail="AI 시스템이 초기화되지 않았습니다.")
+    
+    try:
+        if not rag_manager.csv_verifier:
+            return {"error": "CSV 검증 시스템이 없습니다"}
+        
+        verification = rag_manager.csv_verifier.verify_plan_exists(plan_name)
+        
+        return {
+            "plan_name": plan_name,
+            "verification_result": verification,
+            "exists": verification['exists'],
+            "confidence": verification['confidence'],
+            "match_type": verification['match_type'],
+            "matched_plan": verification['matched_plan']['name'] if verification['matched_plan'] else None
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"검증 디버깅 중 오류: {str(e)}")
