@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings
 
-class BaseSettings(BaseSettings):
+class Settings(BaseSettings):
     OPENAI_API_KEY: str
     OPENAI_MODEL: str = "gpt-3.5-turbo"
     ENVIRONMENT: str = "local"
@@ -10,14 +10,14 @@ class BaseSettings(BaseSettings):
     MAX_TOKENS: int = 1000
     TEMPERATURE: float = 0.7
 
-        # 요청용 스트림 (Spring에서 aiMessage를 보내는 곳)
+    # 요청용 스트림 (Spring에서 aiMessage를 보내는 곳)
     REQUEST_STREAM: str = "ai-request-stream"
 
     # 응답용 스트림 (Spring이 소비하는 곳)
     RESPONSE_STREAM: str = "ai-response-stream"
 
-    # Consumer Group: Redis가 같은 스트림을 여러 소비자가 읽을 수 있게 도와줌
-    CONSUMER_GROUP: str = "ai-processor-group"
+    # Consumer Group: Spring과 매칭
+    CONSUMER_GROUP: str = "request-processor"
 
     # 이 파이썬 소비자의 이름 (Consumer Group 내 개별 소비자 식별용)
     CONSUMER_NAME: str = "ai-consumer-1"

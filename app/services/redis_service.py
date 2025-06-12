@@ -62,21 +62,21 @@ class RedisService:
             print(f"메시지 전송 오류: {e}")
             return None
 
-    @staticmethod
-    def parse_message(message_data: Dict[str, str]) -> Dict[str, Any]:
-        """Redis 메시지 파싱"""
-        parsed = {}
-        for key, value in message_data.items():
-            try:
-                parsed[key] = json.loads(value)
-            except (json.JSONDecodeError, TypeError):
-                parsed[key] = value
-        return parsed
-
+    def parse_message(self, message_data: dict) -> dict:
+        try:
+            if 'data' in message_data:
+                json_str = message_data['data']
+                # 이중 JSON 디코딩
+                first_parse = json.loads(json_str)
+                return json.loads(first_parse)  # 한 번 더
+            return message_data
+        except json.JSONDecodeError as e:
+            print(f"JSON 파싱 오류: {e}")
+            return message_data
+        
     async def close(self):
         """Redis 연결 종료"""
         await self.redis_client.close()
-
 
 # 예시 사용:
 # async with RedisService() as redis_service:

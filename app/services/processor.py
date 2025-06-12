@@ -30,7 +30,7 @@ class MessageProcessor:
             "content": "",
             "type": "",
             "sender": "BOT",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now().isoformat(),
             "bundleRecommendations": "",
             "extractedKeywords": "",
             "updatedPreference": ""
@@ -48,12 +48,12 @@ class MessageProcessor:
                 message=message.payload.content
             )
             res.update({
-                "type": MessageType.GENERAL_RESPONSE,
+                "type": MessageType.GENERAL_RESPONSE.value,
                 "content": ai_result.get("response", "응답을 생성할 수 없습니다.")
             })
         else:
             res.update({
-                "type": MessageType.GENERAL_RESPONSE,
+                "type": MessageType.GENERAL_RESPONSE.value,
                 "content": "AI 시스템이 초기화되지 않았습니다."
             })
         
@@ -70,15 +70,21 @@ class MessageProcessor:
                 user_id=message.payload.user_id,
                 message=message.payload.content
             )
+
+            mentioned_plans = ai_result.get("mentioned_plans", [])
+            if isinstance(mentioned_plans, list):
+                bundle_recs = ", ".join(mentioned_plans)
+            else:
+                bundle_recs = str(mentioned_plans) if mentioned_plans else ""
             
             res.update({
-                "type": MessageType.SUGGESTION,
+                "type": MessageType.SUGGESTION.value,
                 "content": ai_result.get("response", "추천을 생성할 수 없습니다."),
-                "bundleRecommendations": ", ".join(ai_result.get("mentioned_plans", []))
+                "bundleRecommendations": bundle_recs
             })
         else:
             res.update({
-                "type": MessageType.SUGGESTION,
+                "type": MessageType.SUGGESTION.value,
                 "content": "AI 시스템이 초기화되지 않았습니다."
             })
         
@@ -98,14 +104,14 @@ class MessageProcessor:
             )
             
             res.update({
-                "type": MessageType.KEYWORD_RECOMMENDATION,
+                "type": MessageType.KEYWORD_RECOMMENDATION.value,
                 "content": ai_result.get("response", "키워드 추천을 생성할 수 없습니다."),
                 "extractedKeywords": ", ".join(ai_result.get("mentioned_plans", [])),
                 "bundleRecommendations": ", ".join(ai_result.get("mentioned_plans", []))
             })
         else:
             res.update({
-                "type": MessageType.KEYWORD_RECOMMENDATION,
+                "type": MessageType.KEYWORD_RECOMMENDATION.value,
                 "content": "AI 시스템이 초기화되지 않았습니다."
             })
         
@@ -125,13 +131,13 @@ class MessageProcessor:
             )
             
             res.update({
-                "type": MessageType.PREFERENCE_UPDATE,
+                "type": MessageType.PREFERENCE_UPDATE.value,
                 "content": ai_result.get("response", "성향 업데이트를 처리할 수 없습니다."),
                 "updatedPreference": "성향 업데이트됨"  # TODO: 실제 성향 데이터
             })
         else:
             res.update({
-                "type": MessageType.PREFERENCE_UPDATE,
+                "type": MessageType.PREFERENCE_UPDATE.value,
                 "content": "AI 시스템이 초기화되지 않았습니다."
             })
         
@@ -151,13 +157,13 @@ class MessageProcessor:
             )
             
             res.update({
-                "type": MessageType.PROACTIVE_SUGGESTION,
+                "type": MessageType.PROACTIVE_SUGGESTION.value,
                 "content": ai_result.get("response", "정기 추천을 생성할 수 없습니다."),
                 "bundleRecommendations": ", ".join(ai_result.get("mentioned_plans", []))
             })
         else:
             res.update({
-                "type": MessageType.PROACTIVE_SUGGESTION,
+                "type": MessageType.PROACTIVE_SUGGESTION.value,
                 "content": "AI 시스템이 초기화되지 않았습니다."
             })
         
@@ -176,12 +182,12 @@ class MessageProcessor:
             )
             
             res.update({
-                "type": MessageType.GENERAL_RESPONSE,
+                "type": MessageType.GENERAL_RESPONSE.value,
                 "content": ai_result.get("response", "응답을 생성할 수 없습니다.")
             })
         else:
             res.update({
-                "type": MessageType.GENERAL_RESPONSE,
+                "type": MessageType.GENERAL_RESPONSE.value,
                 "content": "AI 시스템이 초기화되지 않았습니다."
             })
         
@@ -191,7 +197,7 @@ class MessageProcessor:
         """알 수 없는 타입 처리"""
         res = await self._build_base_response(message)
         res.update({
-            "type": MessageType.GENERAL_RESPONSE,
+            "type": MessageType.GENERAL_RESPONSE.value,
             "content": "죄송합니다. 요청을 처리할 수 없습니다."
         })
         return res

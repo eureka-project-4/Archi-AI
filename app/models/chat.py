@@ -12,7 +12,7 @@ Base = declarative_base()
 
 # SQLAlchemy 모델 (DB 테이블)
 class ChatMessage(Base):
-    __tablename__ = "chat_messages"
+    __tablename__ = "chats"
     
     chat_id = Column(Integer, primary_key=True, index=True)  # Primary Key
     user_id = Column(Integer, nullable=False)  # 사용자 ID

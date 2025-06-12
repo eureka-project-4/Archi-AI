@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Union
 from datetime import datetime
 from enum import Enum
 
@@ -26,7 +26,7 @@ class AuthMetadata(BaseModel):
 
 class ChatMessage(BaseModel):
     message_id: str = Field(alias="messageId")
-    user_id: str = Field(alias="userId")
+    user_id: Union[str, int] = Field(alias="userId")  # str과 int 모두 허용
     content: str
     type: MessageType
     sender: SenderType
