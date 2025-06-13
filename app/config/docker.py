@@ -21,6 +21,15 @@ class DockerSettings(BaseSettings):
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 50
 
+    REDIS_HOST: str
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+
+    REQUEST_STREAM: str = "ai-request-stream"
+    RESPONSE_STREAM: str = "ai-response-stream"
+    CONSUMER_GROUP: str = "request-processor"
+    CONSUMER_NAME: str = "ai-consumer-1"
+
     ENVIRONMENT: str = "docker"
 
     class Config:

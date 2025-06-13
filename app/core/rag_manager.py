@@ -469,6 +469,7 @@ class RAGManager:
     
     def chat_with_verification(self, user_id: str, message: str) -> Dict[str, Any]:
         try:
+            
             intent_analysis = self.analyze_query_intent(message)
             intent = intent_analysis["intent"]
             
@@ -545,7 +546,7 @@ class RAGManager:
                         "timestamp": datetime.now().isoformat(),
                         "human": message,
                         "ai": ai_response,
-                        "message_type": MessageType.SUGGESTION,  
+                        "message_type": MessageType.SUGGESTION.value,  # Enum을 문자열로 변환
                         "query_intent": intent
                     }
                     
@@ -581,7 +582,7 @@ class RAGManager:
                         return {
                             "response": f"죄송합니다. '{plan_name}' 요금제는 현재 제공되지 않는 요금제입니다. 다른 요금제를 추천해드릴까요?",
                             "user_id": user_id,
-                            "message_type": MessageType.BLOCKED_MESSAGE,
+                            "message_type": MessageType.BLOCKED_MESSAGE.value,  # Enum을 문자열로 변환
                             "mentioned_plans": [plan_name],
                             "confidence_score": verification['confidence'],
                             "verification_status": "차단됨 - 존재하지 않는 요금제",
@@ -591,23 +592,23 @@ class RAGManager:
                         print(f"DEBUG: 요금제 '{plan_name}' 정확히 매칭됨 - CSV 직접 사용")
                         plan_info = verification['matched_plan']
                         ai_response = f"""
-{plan_name} 요금제 정보를 안내해드리겠습니다.
+    {plan_name} 요금제 정보를 안내해드리겠습니다.
 
-**{plan_name}**
-- 월 요금: {plan_info['price']:,}원
-- 데이터: {plan_info['data']}
-- 통화: {plan_info['calls']}
-- 문자: {plan_info['sms']}
-- 혜택: {plan_info['benefit']}
+    **{plan_name}**
+    - 월 요금: {plan_info['price']:,}원
+    - 데이터: {plan_info['data']}
+    - 통화: {plan_info['calls']}
+    - 문자: {plan_info['sms']}
+    - 혜택: {plan_info['benefit']}
 
-이 요금제에 대해 더 궁금한 점이 있으시면 언제든지 문의해주세요.
+    이 요금제에 대해 더 궁금한 점이 있으시면 언제든지 문의해주세요.
                         """
                         
                         conversation_entry = {
                             "timestamp": datetime.now().isoformat(),
                             "human": message,
                             "ai": ai_response.strip(),
-                            "message_type": "SUGGESTION",
+                            "message_type": MessageType.SUGGESTION.value,  # Enum을 문자열로 변환
                             "query_intent": intent
                         }
                         
@@ -669,24 +670,42 @@ class RAGManager:
                     if used_sources:
                         filtered_context = "\n\n".join([doc.page_content for doc in used_sources])
                         
-                        enhanced_prompt = f"""Based ONLY on the following verified data, answer the user's question.
+                        # 특정 요금제를 물어보는 경우와 추천을 요청하는 경우를 구분
+                        if asked_plans:  # 특정 요금제명이 언급된 경우
+                            enhanced_prompt = f"""Based ONLY on the following verified data, answer the user's question.
 
-CRITICAL RULE: If the user asks about a specific plan name that is NOT exactly found in the data below, you MUST respond with "죄송합니다. 해당 요금제를 현재 데이터에서 찾을 수 없습니다."
+    CRITICAL RULE: If the user asks about a specific plan name that is NOT exactly found in the data below, you MUST respond with "죄송합니다. 해당 요금제를 현재 데이터에서 찾을 수 없습니다."
 
-DO NOT:
-- Make up plan names that don't exist in the data
-- Combine information from different plans 
-- Infer or guess pricing/features not explicitly stated
-- Use similar plan names as if they were the requested plan
+    DO NOT:
+    - Make up plan names that don't exist in the data
+    - Combine information from different plans 
+    - Infer or guess pricing/features not explicitly stated
+    - Use similar plan names as if they were the requested plan
 
-ONLY provide information about plans that are explicitly mentioned in the verified data below.
+    ONLY provide information about plans that are explicitly mentioned in the verified data below.
 
-Verified Data:
-{filtered_context}
+    Verified Data:
+    {filtered_context}
 
-User Question: {message}
+    User Question: {message}
 
-Remember: Only answer about plans that are EXACTLY named in the verified data above. If the exact plan name is not found, clearly state it's not available."""
+    Remember: Only answer about plans that are EXACTLY named in the verified data above. If the exact plan name is not found, clearly state it's not available."""
+                        else:  # 추천이나 조건 기반 질문인 경우
+                            enhanced_prompt = f"""Based on the following data, provide recommendations or information to answer the user's question.
+
+    You are a helpful telecommunications plan advisor. Use the verified data below to:
+    - Recommend suitable plans based on user needs
+    - Compare different options
+    - Explain features and benefits
+    - Answer general questions about telecommunications services
+
+    Verified Data:
+    {filtered_context}
+
+    User Question: {message}
+    Previous Conversation: {chat_history_str}
+
+    Please provide a helpful, personalized response based on the user's needs and the available data."""
                         
                         filtered_response = self.combine_docs_chain.invoke({
                             "input": enhanced_prompt,
@@ -739,7 +758,7 @@ Remember: Only answer about plans that are EXACTLY named in the verified data ab
                 "timestamp": datetime.now().isoformat(),
                 "human": message,
                 "ai": ai_response,
-                "message_type": message_type,
+                "message_type": message_type.value if hasattr(message_type, 'value') else message_type,  # Enum을 문자열로 변환
                 "query_intent": intent
             }
             
