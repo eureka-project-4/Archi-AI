@@ -754,7 +754,7 @@ Remember: Only answer about plans that are EXACTLY named in the verified data ab
                 )
             
             self.memory_manager.save_user_memory(user_id, chat_history, conversation_summary)
-            
+            user_id = int(user_id)
             return {
                 "response": ai_response,
                 "user_id": user_id,
