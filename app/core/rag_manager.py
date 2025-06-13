@@ -76,7 +76,7 @@ class RAGManager:
         Path(settings.VECTOR_STORE_DIR).mkdir(parents=True, exist_ok=True)
         Path(settings.MEMORY_DIR).mkdir(parents=True, exist_ok=True)
     
-    def initialize(self, force_rebuild=True):  # 기본값을 True로 변경
+    def initialize(self, force_rebuild=True):
         try:
             vector_path = Path(settings.VECTOR_STORE_DIR) / "faiss_index"
             if vector_path.exists() and not force_rebuild:
@@ -94,7 +94,6 @@ class RAGManager:
             if self.vectorstore:
                 self._setup_chain()
                 print("RAG 체인 설정 완료")
-                
                 self.debug_vectorstore_metadata()
                 
         except Exception as e:
@@ -107,7 +106,6 @@ class RAGManager:
             return
             
         try:
-            # 다양한 키워드로 테스트
             test_queries = ["요금제", "5G", "플랜", "쿠폰", "서비스", "데이터"]
             
             print(f"DEBUG: 벡터스토어 메타데이터 확인")
@@ -125,7 +123,6 @@ class RAGManager:
                 
                 print(f"DEBUG: '{query}' 타입별 분포: {type_counts}")
                 
-                # 첫 번째 문서만 상세 출력
                 if test_docs:
                     first_doc = test_docs[0]
                     print(f"DEBUG: '{query}' 첫 문서 - type: {first_doc.metadata.get('type')}, file: {first_doc.metadata.get('source_file')}")
@@ -133,10 +130,6 @@ class RAGManager:
             
         except Exception as e:
             print(f"DEBUG: 메타데이터 확인 실패: {e}")
-                
-        except Exception as e:
-            print(f"RAG 시스템 초기화 오류: {e}")
-            self.vectorstore = None
     
     def _create_vectorstore_from_files(self):
         pricing_dir = Path(settings.PRICING_DATA_DIR)
@@ -307,120 +300,6 @@ class RAGManager:
             }
     
     def extract_price_conditions(self, text: str) -> Dict[str, Any]:
-        """가격 조건을 추출하는 함수"""
-        try:
-            price_prompt = ChatPromptTemplate.from_template("""
-            Extract price conditions from the user input.
-            
-            Look for:
-            - "X원 이하" (under X won)
-            - "X원 이상" (over X won)  
-            - "X원대" (around X won)
-            - "저렴한" (cheap)
-            - "비싼" (expensive)
-            
-            User input: {user_input}
-            
-            Respond in JSON format only:
-            {{
-                "has_price_condition": true/false,
-                "price_max": number or null,
-                "price_min": number or null,
-                "price_around": number or null,
-                "condition_type": "under|over|around|cheap|expensive|none"
-            }}
-            """)
-            
-            price_chain = price_prompt | self.analysis_llm | StrOutputParser()
-            result = price_chain.invoke({"user_input": text})
-            
-            if '```json' in result:
-                json_match = re.search(r'```json\s*(\{.*?\})\s*```', result, re.DOTALL)
-                if json_match:
-                    result = json_match.group(1)
-            
-            return json.loads(result)
-            
-        except Exception as e:
-            print(f"가격 조건 추출 실패: {e}")
-            return {"has_price_condition": False}
-    
-    def search_plans_by_price(self, price_condition, data_type=None):
-        """가격 조건으로 상품 검색"""
-        if not self.csv_verifier or not price_condition.get("has_price_condition"):
-            return []
-        
-        print(f"DEBUG: 가격 검색 - 데이터 타입 필터: {data_type}")
-        
-        criteria = {}
-        
-        if price_condition.get("price_max"):
-            criteria["price_range"] = (0, price_condition["price_max"])
-        elif price_condition.get("price_min"):
-            criteria["price_range"] = (price_condition["price_min"], 999999)
-        elif price_condition.get("price_around"):
-            around_price = price_condition["price_around"]
-            criteria["price_range"] = (around_price - 10000, around_price + 10000)
-        
-        # 모든 결과를 가져온 후 데이터 타입으로 필터링 (필요시)
-        all_results = self.csv_verifier.find_plans_by_criteria(**criteria)
-        
-        if data_type is None:
-            # 모든 타입 반환 (comprehensive 검색)
-            print(f"DEBUG: 전체 {len(all_results)}개 상품 반환 (모든 타입)")
-            return all_results
-        
-        # 특정 타입만 필터링
-        filtered_results = []
-        for plan in all_results:
-            plan_type = plan.get('type', 'unknown')
-            print(f"DEBUG: 상품 '{plan['name']}' - 타입: {plan_type}, 가격: {plan['price']}")
-            if plan_type == data_type:
-                filtered_results.append(plan)
-        
-        print(f"DEBUG: 전체 {len(all_results)}개 중 {data_type} 타입 {len(filtered_results)}개 필터링됨")
-        return filtered_results
-    
-    def extract_plan_names_from_input(self, text: str) -> List[str]:
-        try:
-            extraction_prompt = ChatPromptTemplate.from_template("""
-            Extract actual product names or plan names from the user input.
-            
-            DO NOT extract:
-            - Price conditions (e.g., "under 50,000 won", "cheap")
-            - Generic terms with conditions (e.g., "which plan", "cheap plan", "plan under 30,000 won")
-            - General recommendation requests (e.g., "recommend", "available", "tell me", "inquiry")
-            
-            ONLY extract:
-            - Specific product names or service names (noun form only)
-            - Examples: "5G Premier Essential", "T Plan Special", "LTE Basic"
-            
-            User input: {user_input}
-            
-            Respond in JSON format only:
-            {{
-                "extracted_plans": ["list of specific plan names"],
-                "confidence": 0.0-1.0
-            }}
-            """)
-            
-            extraction_chain = extraction_prompt | self.analysis_llm | StrOutputParser()
-            result = extraction_chain.invoke({"user_input": text})
-            
-            if '```json' in result:
-                json_match = re.search(r'```json\s*(\{.*?\})\s*```', result, re.DOTALL)
-                if json_match:
-                    result = json_match.group(1)
-            
-            extracted_data = json.loads(result)
-            return extracted_data.get("extracted_plans", [])
-            
-        except Exception as e:
-            print(f"요금제명 추출 실패: {e}")
-            return []
-    
-    def extract_price_conditions(self, text: str) -> Dict[str, Any]:
-        """가격 조건을 추출하는 함수"""
         try:
             price_prompt = ChatPromptTemplate.from_template("""
             Extract price conditions from the user input.
@@ -459,7 +338,6 @@ class RAGManager:
             return {"has_price_condition": False}
     
     def search_plans_by_price(self, price_condition: Dict[str, Any], data_type: str = None) -> List[Dict[str, Any]]:
-        """가격 조건으로 상품 검색"""
         if not self.csv_verifier or not price_condition.get("has_price_condition"):
             return []
         
@@ -475,15 +353,12 @@ class RAGManager:
             around_price = price_condition["price_around"]
             criteria["price_range"] = (around_price - 10000, around_price + 10000)
         
-        # 모든 결과를 가져온 후 데이터 타입으로 필터링 (필요시)
         all_results = self.csv_verifier.find_plans_by_criteria(**criteria)
         
         if data_type is None:
-            # 모든 타입 반환 (comprehensive 검색)
             print(f"DEBUG: 전체 {len(all_results)}개 상품 반환 (모든 타입)")
             return all_results
         
-        # 특정 타입만 필터링
         filtered_results = []
         for plan in all_results:
             plan_type = plan.get('type', 'unknown')
@@ -493,42 +368,8 @@ class RAGManager:
         
         print(f"DEBUG: 전체 {len(all_results)}개 중 {data_type} 타입 {len(filtered_results)}개 필터링됨")
         return filtered_results
-        try:
-            extraction_prompt = ChatPromptTemplate.from_template("""
-            Extract actual product names or plan names from the user input.
-            
-            DO NOT extract:
-            - Price conditions (e.g., "under 50,000 won", "cheap")
-            - Generic terms with conditions (e.g., "which plan", "cheap plan", "plan under 30,000 won")
-            - General recommendation requests (e.g., "recommend", "available", "tell me", "inquiry")
-            
-            ONLY extract:
-            - Specific product names or service names (noun form only)
-            - Examples: "5G Premier Essential", "T Plan Special", "LTE Basic"
-            
-            User input: {user_input}
-            
-            Respond in JSON format only:
-            {{
-                "extracted_plans": ["list of specific plan names"],
-                "confidence": 0.0-1.0
-            }}
-            """)
-            
-            extraction_chain = extraction_prompt | self.analysis_llm | StrOutputParser()
-            result = extraction_chain.invoke({"user_input": text})
-            
-            if '```json' in result:
-                json_match = re.search(r'```json\s*(\{.*?\})\s*```', result, re.DOTALL)
-                if json_match:
-                    result = json_match.group(1)
-            
-            extracted_data = json.loads(result)
-            return extracted_data.get("extracted_plans", [])
-            
-        except Exception as e:
-            print(f"요금제명 추출 실패: {e}")
-            return []
+    
+    def extract_plan_names_from_input(self, text: str) -> List[str]:
         try:
             extraction_prompt = ChatPromptTemplate.from_template("""
             Extract actual product names or plan names from the user input.
@@ -582,12 +423,11 @@ class RAGManager:
             
         search_filter = self.get_search_filter(intent)
         
-        # k값을 더 크게 설정하여 더 많은 문서 검색
-        search_k = settings.RETRIEVAL_K * 3  # 기본값의 3배
+        search_k = settings.RETRIEVAL_K * 3
         if intent == "plan":
-            search_k = max(15, search_k)  # plan 검색시 최소 15개
+            search_k = max(15, search_k)
         elif intent == "comprehensive":
-            search_k = max(20, search_k)  # 종합 검색시 최소 20개
+            search_k = max(20, search_k)
         
         print(f"DEBUG: get_filtered_retriever 호출됨 - intent: {intent}, filter: {search_filter}, k: {search_k}")
         
@@ -642,15 +482,16 @@ class RAGManager:
             print(f"DEBUG: 추출된 요금제명: {asked_plans}")
             print(f"DEBUG: 추출된 가격 조건: {price_conditions}")
             
-            # 사용자 메모리 먼저 로드
             chat_history, conversation_summary, _ = self.memory_manager.load_user_memory(user_id)
             chat_history_str = self.memory_manager.format_chat_history(chat_history, conversation_summary)
+            
+            # 변수 초기화
+            ai_response = ""
             
             # 가격 조건이 있으면 CSV에서 직접 검색
             if price_conditions.get("has_price_condition") and self.csv_verifier:
                 print(f"DEBUG: 가격 조건 기반 검색 실행")
                 
-                # 질문 의도에 따라 검색할 데이터 타입 결정
                 if intent == "plan":
                     data_type_filter = "plan"
                     search_description = "통신 요금제"
@@ -661,10 +502,9 @@ class RAGManager:
                     data_type_filter = "coupon"
                     search_description = "쿠폰/혜택"
                 elif intent == "comprehensive":
-                    data_type_filter = None  # 모든 타입 검색
+                    data_type_filter = None
                     search_description = "모든 상품"
                 else:
-                    # 일반적인 질문이지만 가격 조건이 있으면 요금제로 간주
                     data_type_filter = "plan"
                     search_description = "통신 요금제"
                 
@@ -673,13 +513,11 @@ class RAGManager:
                 if data_type_filter:
                     matching_plans = self.search_plans_by_price(price_conditions, data_type_filter)
                 else:
-                    # comprehensive인 경우 모든 타입에서 검색
                     matching_plans = self.search_plans_by_price(price_conditions, None)
                 
                 if matching_plans:
                     print(f"DEBUG: 조건에 맞는 {search_description} {len(matching_plans)}개 발견")
                     
-                    # 상위 3개로 응답 생성
                     top_plans = matching_plans[:3]
                     
                     condition_text = ""
@@ -688,21 +526,20 @@ class RAGManager:
                     elif price_conditions.get("price_around"):
                         condition_text = f"월 {price_conditions['price_around']:,}원대"
                     
-                    response_text = f"{condition_text} 조건에 맞는 {search_description}를 추천해드리겠습니다.\n\n"
+                    ai_response = f"{condition_text} 조건에 맞는 {search_description}를 추천해드리겠습니다.\n\n"
                     
                     for i, plan in enumerate(top_plans, 1):
-                        response_text += f"**{i}. {plan['name']}**\n"
-                        response_text += f"- 월 요금: {plan['price']:,}원\n"
+                        ai_response += f"**{i}. {plan['name']}**\n"
+                        ai_response += f"- 월 요금: {plan['price']:,}원\n"
                         
-                        # 데이터 타입에 따라 다른 정보 표시
                         if data_type_filter == "plan":
-                            response_text += f"- 데이터: {plan['data']}\n"
-                            response_text += f"- 통화: {plan['calls']}\n"
-                            response_text += f"- 문자: {plan['sms']}\n"
+                            ai_response += f"- 데이터: {plan['data']}\n"
+                            ai_response += f"- 통화: {plan['calls']}\n"
+                            ai_response += f"- 문자: {plan['sms']}\n"
                         
-                        response_text += f"- 혜택: {plan['benefit']}\n\n"
+                        ai_response += f"- 혜택: {plan['benefit']}\n\n"
                     
-                    response_text += "더 자세한 정보나 다른 조건의 상품이 궁금하시면 언제든지 문의해주세요!"
+                    ai_response += "더 자세한 정보나 다른 조건의 상품이 궁금하시면 언제든지 문의해주세요!"
                     
                     conversation_entry = {
                         "timestamp": datetime.now().isoformat(),
@@ -716,7 +553,7 @@ class RAGManager:
                     self.memory_manager.save_user_memory(user_id, chat_history, conversation_summary)
                     
                     return {
-                        "response": response_text,
+                        "response": ai_response,
                         "user_id": user_id,
                         "message_type": "SUGGESTION",
                         "confidence_score": 1.0,
@@ -729,6 +566,7 @@ class RAGManager:
                 else:
                     print(f"DEBUG: 조건에 맞는 {search_description}가 없음")
             
+            # 특정 요금제명이 언급된 경우 검증
             if asked_plans and self.csv_verifier:
                 for plan_name in asked_plans:
                     verification = self.csv_verifier.verify_plan_exists(plan_name)
@@ -751,9 +589,8 @@ class RAGManager:
                         }
                     elif verification['exists'] and verification['confidence'] >= 0.8:
                         print(f"DEBUG: 요금제 '{plan_name}' 정확히 매칭됨 - CSV 직접 사용")
-                        # 정확한 매칭이 확인된 경우 CSV 데이터 직접 사용
                         plan_info = verification['matched_plan']
-                        direct_response = f"""
+                        ai_response = f"""
 {plan_name} 요금제 정보를 안내해드리겠습니다.
 
 **{plan_name}**
@@ -769,7 +606,7 @@ class RAGManager:
                         conversation_entry = {
                             "timestamp": datetime.now().isoformat(),
                             "human": message,
-                            "ai": direct_response.strip(),
+                            "ai": ai_response.strip(),
                             "message_type": "SUGGESTION",
                             "query_intent": intent
                         }
@@ -778,7 +615,7 @@ class RAGManager:
                         self.memory_manager.save_user_memory(user_id, chat_history, conversation_summary)
                         
                         return {
-                            "response": direct_response.strip(),
+                            "response": ai_response.strip(),
                             "user_id": user_id,
                             "message_type": "SUGGESTION",
                             "confidence_score": 1.0,
@@ -792,6 +629,7 @@ class RAGManager:
             else:
                 print(f"DEBUG: 추출된 요금제명이 없거나 CSV 검증 시스템이 없음")
             
+            # RAG 체인으로 일반 응답 생성
             if self.rag_chain is None:
                 return {
                     "response": "죄송합니다. AI 시스템이 초기화되지 않았습니다.",
@@ -873,9 +711,11 @@ Remember: Only answer about plans that are EXACTLY named in the verified data ab
                 ai_response = str(response)
                 used_sources = []
             
+            # 메시지 분류
             classification = self.message_classifier.classify_message(message, ai_response)
             message_type = classification["message_type"]
             
+            # 신뢰도 계산
             final_confidence_score = 1.0
             if message_type == "SUGGESTION" and self.csv_verifier:
                 mentioned_in_response = self.csv_verifier.find_mentioned_plans(ai_response)
@@ -894,6 +734,7 @@ Remember: Only answer about plans that are EXACTLY named in the verified data ab
                     if final_confidence_score < 0.7:
                         ai_response += f"\n\n⚠️ 일부 정보의 정확성을 확인해주세요. 정확한 요금제 정보는 공식 홈페이지에서 확인 가능합니다."
             
+            # 대화 기록 저장
             conversation_entry = {
                 "timestamp": datetime.now().isoformat(),
                 "human": message,
