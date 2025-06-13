@@ -3,16 +3,15 @@ from typing import List, Optional
 from datetime import datetime
 from enum import Enum
 
-class MessageType(Enum):
-    CHAT = "chat"       
-    SUGGESTION = "suggestion"  
+# MessageType을 app.models.message에서 import
+from app.models.message import MessageType
 
 @dataclass
 class ChatEntry:
     timestamp: str
     human: str
     ai: str
-    message_type: MessageType = MessageType.CHAT
+    message_type: MessageType = MessageType.GENERAL_RESPONSE  # 기본값 변경
     mentioned_plans: List[str] = None
     
     def __post_init__(self):
@@ -20,7 +19,8 @@ class ChatEntry:
             self.mentioned_plans = []
     
     @classmethod
-    def create_now(cls, human_input: str, ai_response: str, message_type: MessageType = MessageType.CHAT, 
+    def create_now(cls, human_input: str, ai_response: str, 
+                   message_type: MessageType = MessageType.GENERAL_RESPONSE, 
                    mentioned_plans: List[str] = None):
         return cls(
             timestamp=datetime.now().isoformat(),
@@ -29,6 +29,7 @@ class ChatEntry:
             message_type=message_type,
             mentioned_plans=mentioned_plans or []
         )
+
 
 @dataclass
 class UserMemory:

@@ -4,6 +4,7 @@ from typing import Dict, Any, List
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from app.models.message import MessageType
 
 class MessageClassifier:
     def __init__(self, llm: ChatOpenAI):
@@ -12,19 +13,26 @@ class MessageClassifier:
     
     def setup_classification_chain(self):
         classification_prompt = ChatPromptTemplate.from_template("""
-        AI 응답을 분석하여 일반 대화인지 요금제 추천인지 판단해주세요.
+        사용자 입력과 AI 응답을 분석하여 메시지 타입을 정확히 분류해주세요.
 
+        사용자 입력: {human_input}
         AI 응답: {ai_response}
 
         분류 기준:
-        - SUGGESTION: 구체적인 요금제명 언급, 월 요금 제시, "추천", "적합" 등 권유 표현
-        - CHAT: 일반적인 대화, 인사, 질문 답변
+        - SUGGESTION: 사용자 성향/프로필 기반 맞춤형 추천. "당신에게 맞는", "고객님께 추천", "프로필 기반" 등
+        - KEYWORD_RECOMMENDATION: 특정 키워드나 조건 기반 추천. "~관련 요금제", "데이터 많은", "저렴한" 등
+        - PREFERENCE_UPDATE: 사용자 선호도 변경 관련. "이제는 ~를 선호", "~로 바꾸고 싶어", "요즘은" 등
+        - PROACTIVE_SUGGESTION: 시스템 주도적 추천. "이번 달 추천", "새로운 요금제 출시", "정기 추천" 등
+        - GENERAL_RESPONSE: 일반 대화, 인사, 단순 정보 제공, 질문 답변
+        - USER_MESSAGE: 사용자가 보낸 원본 메시지 (분류 불필요)
+        - FILTERED_MESSAGE: 부적절한 내용 감지됨 (욕설, 비속어 등)
 
         JSON만 응답:
         {{
-            "message_type": "CHAT" 또는 "SUGGESTION",
-            "mentioned_plans": ["요금제명들"],
-            "has_pricing": true/false
+            "message_type": "위 7가지 타입 중 하나",
+            "mentioned_plans": ["언급된 요금제명들"],
+            "has_pricing": true/false,
+            "confidence": 0.0-1.0
         }}
         """)
         
@@ -32,73 +40,53 @@ class MessageClassifier:
     
     def classify_message(self, human_input: str, ai_response: str) -> Dict[str, Any]:
         try:
-            # 1. 간단한 키워드 체크 먼저
-            suggestion_indicators = [
-                '요금제', '추천', '적합', '월.*원', '\d+GB', '혜택', '할인',
-                '무제한', '데이터', '통화', '변경', '선택'
-            ]
+            result = self.classification_chain.invoke({
+                "human_input": human_input,
+                "ai_response": ai_response
+            })
             
-            has_suggestion_keywords = any(
-                re.search(pattern, ai_response, re.IGNORECASE) 
-                for pattern in suggestion_indicators
-            )
+            if '```json' in result:
+                json_match = re.search(r'```json\s*(\{.*?\})\s*```', result, re.DOTALL)
+                if json_match:
+                    result = json_match.group(1)
             
-            # 2. 요금제명 추출
-            plan_patterns = [
-                r'(\w+\s*요금제)',
-                r'가족\s*쉐어\s*\d+인'
-            ]
+            data = json.loads(result)
+            llm_type_str = data.get("message_type", "GENERAL_RESPONSE")
+            llm_plans = data.get("mentioned_plans", [])
             
-            mentioned_plans = []
-            for pattern in plan_patterns:
-                matches = re.findall(pattern, ai_response, re.IGNORECASE)
-                mentioned_plans.extend(matches)
+            # 문자열을 MessageType Enum으로 변환
+            type_mapping = {
+                "SUGGESTION": MessageType.SUGGESTION,
+                "KEYWORD_RECOMMENDATION": MessageType.KEYWORD_RECOMMENDATION,
+                "PREFERENCE_UPDATE": MessageType.PREFERENCE_UPDATE,
+                "PROACTIVE_SUGGESTION": MessageType.PROACTIVE_SUGGESTION,
+                "GENERAL_RESPONSE": MessageType.GENERAL_RESPONSE,
+                "USER_MESSAGE": MessageType.USER_MESSAGE,
+                "FILTERED_MESSAGE": MessageType.FILTERED_MESSAGE,
+                # 하위 호환성
+                "CHAT": MessageType.GENERAL_RESPONSE,
+            }
             
-            # 3. LLM 분류 (키워드가 있을 때만)
-            if has_suggestion_keywords:
-                try:
-                    result = self.classification_chain.invoke({
-                        "ai_response": ai_response
-                    })
-                    
-                    # JSON 추출
-                    if '```json' in result:
-                        json_match = re.search(r'```json\s*(\{.*?\})\s*```', result, re.DOTALL)
-                        if json_match:
-                            result = json_match.group(1)
-                    
-                    data = json.loads(result)
-                    llm_type = data.get("message_type", "SUGGESTION")
-                    llm_plans = data.get("mentioned_plans", [])
-                    
-                    # LLM 결과와 정규식 결과 병합
-                    all_plans = list(set(mentioned_plans + llm_plans))
-                    
-                    return {
-                        "message_type": llm_type,
-                        "mentioned_plans": all_plans,
-                        "reasoning": "LLM + 키워드 분석"
-                    }
-                    
-                except Exception as e:
-                    print(f"LLM 분류 실패, 키워드 기반으로 대체: {e}")
-            
-            # 4. 키워드 기반 최종 판단
-            if has_suggestion_keywords or mentioned_plans:
-                message_type = "suggestion"
-            else:
-                message_type = "chat"
+            llm_type = type_mapping.get(llm_type_str, MessageType.GENERAL_RESPONSE)
+
+            # Fallback (더 엄격한 정규식 적용)
+            if not llm_plans:
+                pattern = r'([가-힣A-Za-z0-9\- ]{2,}(?:요금제|플랜))'
+                for match in re.findall(pattern, ai_response):
+                    cleaned = match.strip()
+                    if any(x in cleaned for x in ['추천', '있', '알려', '문의', '주세요', '있는', '추천해', '추천해줘']):
+                        continue
+                    llm_plans.append(cleaned)
             
             return {
-                "message_type": message_type,
-                "mentioned_plans": mentioned_plans,
-                "reasoning": "키워드 기반 분류"
+                "message_type": llm_type,
+                "mentioned_plans": list(set(llm_plans)),
+                "reasoning": "LLM+정규식"
             }
             
         except Exception as e:
-            print(f"분류 실패: {e}")
             return {
-                "message_type": "chat",
+                "message_type": MessageType.GENERAL_RESPONSE,
                 "mentioned_plans": [],
                 "reasoning": f"오류: {e}"
             }
