@@ -1,5 +1,6 @@
 import openai
 from app.config import settings
+import os
 #  금칙어 필터링
 class ContentFilter:
     def __init__(self):
