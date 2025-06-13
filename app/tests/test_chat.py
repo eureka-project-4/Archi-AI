@@ -79,6 +79,42 @@ def test_multiturn_chat():
                 "mentioned_plans": [],
                 "verification_status": "높은 신뢰도 - 정확한 정보"
             }
+        },
+        {
+            "name": "기억 테스트",
+            "message": "내 이름이 뭐였는지 기억나?",
+            "expect": {
+                "response_contains": "추천",
+                "mentioned_plans": [],
+                "verification_status": "높은 신뢰도 - 정확한 정보"
+            }
+        },
+        {
+            "name": "기억 테스트",
+            "message": "내 나이가 몇살이었지?",
+            "expect": {
+                "response_contains": "추천",
+                "mentioned_plans": [],
+                "verification_status": "높은 신뢰도 - 정확한 정보"
+            }
+        },
+        {
+            "name": "기억 테스트",
+            "message": "내가 물어봤던 요금제가 뭐였는지 기억나?",
+            "expect": {
+                "response_contains": "추천",
+                "mentioned_plans": [],
+                "verification_status": "높은 신뢰도 - 정확한 정보"
+            }
+        },
+        {
+            "name": "요약 테스트",
+            "message": "나에 대해 아는 정보 다 말해줘",
+            "expect": {
+                "response_contains": "추천",
+                "mentioned_plans": [],
+                "verification_status": "높은 신뢰도 - 정확한 정보"
+            }
         }
     ]
     
