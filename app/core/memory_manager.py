@@ -10,7 +10,7 @@ from langchain_core.output_parsers import StrOutputParser
 class MemoryManager:
     def __init__(self, memory_dir: str, llm: ChatOpenAI):
         self.memory_dir = Path(memory_dir)
-        self.memory_dir.mkdir(exist_ok=True)
+        self.memory_dir.mkdir(parents=True, exist_ok=True)
         self.export_dir = Path("chat_history")
         self.export_dir.mkdir(exist_ok=True)
         self.llm = llm
