@@ -4,7 +4,7 @@ import os
 #  금칙어 필터링
 class ContentFilter:
     def __init__(self):
-        os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
+        self.client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
     
     async def contains_forbidden_content(self, content: str) -> bool:
         """

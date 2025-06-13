@@ -461,14 +461,17 @@ class RAGManager:
             )
     
     def load_user_context(self, user_id: str) -> tuple:
+        user_id = str(user_id)
         chat_history, conversation_summary, is_existing_user = self.memory_manager.load_user_memory(user_id)
         return chat_history, conversation_summary, is_existing_user
     
     def chat(self, user_id: str, message: str) -> Dict[str, Any]:
+        user_id = str(user_id)
         return self.chat_with_verification(user_id, message)
     
     def chat_with_verification(self, user_id: str, message: str) -> Dict[str, Any]:
         try:
+            user_id = str(user_id)
             intent_analysis = self.analyze_query_intent(message)
             intent = intent_analysis["intent"]
             
@@ -581,7 +584,7 @@ class RAGManager:
                         return {
                             "response": f"죄송합니다. '{plan_name}' 요금제는 현재 제공되지 않는 요금제입니다. 다른 요금제를 추천해드릴까요?",
                             "user_id": user_id,
-                            "message_type": MessageType.FILTERED_MESSAGE,
+                            "message_type": MessageType.BLOCKED_MESSAGE,
                             "mentioned_plans": [plan_name],
                             "confidence_score": verification['confidence'],
                             "verification_status": "차단됨 - 존재하지 않는 요금제",
@@ -823,6 +826,7 @@ Remember: Only answer about plans that are EXACTLY named in the verified data ab
         ]
     
     def get_user_statistics(self, user_id: str) -> Dict[str, Any]:
+        user_id = str(user_id)
         chat_history, conversation_summary, _ = self.memory_manager.load_user_memory(user_id)
         stats = self.memory_manager.get_user_statistics(user_id, chat_history, conversation_summary)
         
