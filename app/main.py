@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from app.config import settings
 from app.api import admin
+from app.api import chat
 from app.core.rag_manager import RAGManager
 from app.services.consumer import stream_consumer
 
@@ -53,7 +54,7 @@ app.add_middleware(
 
 # 관리자 API만 포함
 app.include_router(admin.router, prefix="/admin", tags=["admin"])
-
+app.include_router(chat.router, prefix="/chat", tags=["chat"]) #시연용으로 잠깐 살려둠
 @app.get("/")
 async def root():
     return {"message": "AI 처리 서버가 실행 중입니다"}
