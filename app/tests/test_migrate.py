@@ -3,7 +3,6 @@ from app.services.ai_classifier import ai_classifier
 from app.services.content_filter import content_filter
 from app.models.message import AuthMetadata
 import json
-
 async def test_components():
     # 1. AI Classifier 테스트
     print("=== AI Classifier 테스트 ===")
@@ -36,13 +35,10 @@ async def test_components():
     for content in test_contents:
         # Raw response를 위해 client 직접 호출
         try:
-            response = content_filter.client.moderations.create(
-                model="omni-moderation-latest",
-                input=content
-            )
+            response=content_filter.contains_forbidden_content(content)
             
             print(f"\n내용: '{content}'")
-            print(f"플래그됨: {response.results[0].flagged}")
+            print(response)
             
             
             
