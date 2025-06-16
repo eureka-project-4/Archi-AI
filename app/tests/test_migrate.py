@@ -3,7 +3,6 @@ from app.services.ai_classifier import ai_classifier
 from app.services.content_filter import content_filter
 from app.models.message import AuthMetadata
 import json
-from app.services.bad_word_filter import content_filter2
 async def test_components():
     # 1. AI Classifier 테스트
     print("=== AI Classifier 테스트 ===")
@@ -36,7 +35,7 @@ async def test_components():
     for content in test_contents:
         # Raw response를 위해 client 직접 호출
         try:
-            response=content_filter2.detect_profanity(content)
+            response=content_filter.contains_forbidden_content(content)
             
             print(f"\n내용: '{content}'")
             print(response)
