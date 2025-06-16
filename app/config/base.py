@@ -23,4 +23,4 @@ class Settings(BaseSettings):
     CONSUMER_NAME: str = "ai-consumer-1"
     
     class Config:
-        env_file = ".env"
+        env_file = ".env.docker"

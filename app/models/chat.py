@@ -1,7 +1,25 @@
 # app/models/chat.py
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
+from sqlalchemy import Column, Integer, String, DateTime, Text
+from sqlalchemy.ext.declarative import declarative_base
+from datetime import datetime
+
+
+Base = declarative_base()
+
+
+# SQLAlchemy 모델 (DB 테이블)
+class ChatMessage(Base):
+    __tablename__ = "chats"
+    
+    chat_id = Column(Integer, primary_key=True, index=True)  # Primary Key
+    user_id = Column(Integer, nullable=False)  # 사용자 ID
+    message = Column(Text, nullable=False)     # 메시지 내용
+    sender = Column(String(10), nullable=False)  # USER 또는 BOT
+    created_at = Column(DateTime, default=datetime.now)  # 생성 시간
+    message_type = Column(String(50), nullable=True)     # 메시지 타입
 
 class ChatHistoryItem(BaseModel):
     user: str
