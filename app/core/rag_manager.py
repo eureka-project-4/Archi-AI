@@ -192,9 +192,9 @@ class RAGManager:
         if 'plan' in filename_lower:
             print(f"DEBUG: plan 타입으로 분류")
             return 'plan'
-        elif 'service' in filename_lower:
-            print(f"DEBUG: service 타입으로 분류")
-            return 'service'
+        elif 'vass' in filename_lower:
+            print(f"DEBUG: vass 타입으로 분류")
+            return 'vass'
         elif 'coupon' in filename_lower:
             print(f"DEBUG: coupon 타입으로 분류")
             return 'coupon'
