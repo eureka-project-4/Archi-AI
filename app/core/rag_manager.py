@@ -385,7 +385,7 @@ class RAGManager:
             
             ONLY extract:
             - Specific product names or service names (noun form only)
-            - Examples: "5G Premier Essential", "T Plan Special", "LTE Basic"
+            - Examples: "5G 프리미어 에센셜", "T플랜 스페셜", "LTE 베이직"
             
             User input: {user_input}
             
@@ -682,64 +682,49 @@ class RAGManager:
                     if used_sources:
                         filtered_context = "\n\n".join([doc.page_content for doc in used_sources])
                         
-                        # intent에 따른 프롬프트 분기
                         if intent == "vass":
-                            enhanced_prompt = f"""
-                            Based ONLY on the following verified data, answer the user's question about additional services (부가서비스).
-                            IMPORTANT: You MUST respond in Korean (한국어로 답변해주세요).
-                            INSTRUCTIONS:
-                            - List and explain the available additional services
-                            - Include service names, prices, and benefits
-                            - Group similar services if applicable (e.g., streaming services, security services)
-                            - Be clear about what each service offers
+                            enhanced_prompt = f"""Based ONLY on the following verified data, answer the user's question about additional services.
 
-                            Verified Additional Services Data:
-                            {filtered_context}
+                        If no matching services are found, respond with "죄송합니다. 요청하신 부가서비스를 찾을 수 없습니다."
 
-                            User Question: {message}
+                        List and explain the available additional services including their names, prices, and benefits.
 
-                            Provide a helpful response about the additional services based on the data above.
-                            """
+                        Verified Additional Services Data:
+                        {filtered_context}
+
+                        User Question: {message}"""
 
                         elif intent == "coupon":
-                            enhanced_prompt = f"""
-                            Based ONLY on the following verified data, answer the user's question about coupons and benefits.
-                            IMPORTANT: You MUST respond in Korean (한국어로 답변해주세요).
-                            INSTRUCTIONS:
-                            - List available coupons and their benefits
-                            - Include discount amounts and validity periods if available
-                            - Explain how to use or redeem these benefits
-                            - Group by category if helpful (e.g., entertainment, shopping, lifestyle)
+                            enhanced_prompt = f"""Based ONLY on the following verified data, answer the user's question about coupons and benefits.
 
-                            Verified Coupon Data:
-                            {filtered_context}
+                        If no matching coupons are found, respond with "죄송합니다. 요청하신 쿠폰을 찾을 수 없습니다."
 
-                            User Question: {message}
+                        List available coupons and their benefits including discount amounts and how to use them.
 
-                            Provide a helpful response about the coupons and benefits based on the data above.
-                            """
+                        Verified Coupon Data:
+                        {filtered_context}
+
+                        User Question: {message}"""
 
                         else:  # intent == "plan"
-                            enhanced_prompt = f"""
-                            Based ONLY on the following verified data, answer the user's question.
-                            IMPORTANT: You MUST respond in Korean (한국어로 답변해주세요).
-                            CRITICAL RULE: If the user asks about a specific plan name that is NOT exactly found in the data below, you MUST respond with "죄송합니다. 해당 요금제를 현재 데이터에서 찾을 수 없습니다."
+                            enhanced_prompt = f"""Based ONLY on the following verified data, answer the user's question.
 
-                            DO NOT:
-                            - Make up plan names that don't exist in the data
-                            - Combine information from different plans 
-                            - Infer or guess pricing/features not explicitly stated
-                            - Use similar plan names as if they were the requested plan
+                        CRITICAL RULE: If the user asks about a specific plan name that is NOT exactly found in the data below, you MUST respond with "죄송합니다. 해당 요금제를 현재 데이터에서 찾을 수 없습니다."
 
-                            ONLY provide information about plans that are explicitly mentioned in the verified data below.
+                        DO NOT:
+                        - Make up plan names that don't exist in the data
+                        - Combine information from different plans 
+                        - Infer or guess pricing/features not explicitly stated
+                        - Use similar plan names as if they were the requested plan
 
-                            Verified Data:
-                            {filtered_context}
+                        ONLY provide information about plans that are explicitly mentioned in the verified data below.
 
-                            User Question: {message}
+                        Verified Data:
+                        {filtered_context}
 
-                            Remember: Only answer about plans that are EXACTLY named in the verified data above. If the exact plan name is not found, clearly state it's not available.
-                            """
+                        User Question: {message}
+
+                        Remember: Only answer about plans that are EXACTLY named in the verified data above. If the exact plan name is not found, clearly state it's not available."""
                         
                         filtered_response = self.combine_docs_chain.invoke({
                             "input": enhanced_prompt,
