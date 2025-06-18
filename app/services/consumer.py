@@ -134,23 +134,19 @@ class StreamConsumer:
             if message_data is None:
                 message_data = dict(fields)
             
-            # 필수 필드 추출
             user_id = None
             message = None
             
             if isinstance(message_data, dict):
-                # payload 구조 지원
                 if 'payload' in message_data:
                     payload = message_data['payload']
                     user_id = payload.get('userId') or payload.get('user_id')
                     message = payload.get('content') or payload.get('message')
                 
-                # 직접 구조 지원
                 if not user_id or not message:
                     user_id = message_data.get('user_id') or message_data.get('userId')
                     message = message_data.get('message') or message_data.get('content')
             
-            # 타입 변환
             if user_id is not None:
                 user_id = str(user_id)
             
@@ -160,16 +156,20 @@ class StreamConsumer:
             
             print(f"🎯 AI 처리 시작: user_id={user_id}, message='{message[:30]}...'")
             
-            # AI 응답 생성 (메모리 저장 포함)
             ai_response = await self.get_ai_response_with_memory(user_id, message)
-            
-            # 응답 저장
+            from app.services.ai_classifier import ai_classifier
+            classification_result = await ai_classifier.classify_with_ai_response(
+                user_input=message,
+                ai_response=ai_response
+            )
+            print(f"🔍 메시지 분류 결과: {classification_result}")
             response_data = {
                 'user_id': user_id,
                 'original_message': message,
                 'ai_response': ai_response,
-                'message_type': 'GENERAL_RESPONSE',
-                'confidence_score': 1.0,
+                'message_type': classification_result.get('message_type', 'GENERAL_RESPONSE').value,
+                'confidence_score': classification_result.get('confidence', 0.0),
+                'mentioned_plans': ','.join(classification_result['mentioned_plans']) if classification_result['mentioned_plans'] else '',
                 'processed_at': datetime.now().isoformat()
             }
             
@@ -198,9 +198,14 @@ class StreamConsumer:
             if not rag_manager:
                 return "죄송합니다. AI 시스템이 초기화되지 않았습니다."
             
+            from app.core.content_filter import content_filter
             print(f"🤖 RAG 매니저를 통한 AI 처리...")
+            is_inappropriate = content_filter.contains_forbidden_content(message)
+            if is_inappropriate:
+                print(f"🚫 부적절한 메시지 감지됨: user_id={user_id}")
+                return "죄송합니다. 부적절한 내용이 포함된 메시지는 처리할 수 없습니다. 정중하고 건전한 대화를 부탁드립니다."
             
-            # 🔥 핵심: chat 메서드 사용 (chat_with_verification 대신)
+           
             if hasattr(rag_manager, 'chat'):
                 print(f"📞 chat 메서드 호출")
                 result = rag_manager.chat(user_id, message)

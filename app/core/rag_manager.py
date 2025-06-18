@@ -210,11 +210,15 @@ class RAGManager:
         **Current User: {user_id}**
         
         **CRITICAL INSTRUCTIONS:**
+        - If user asks for "one plan" or "a plan", recommend ONLY ONE best plan
         - ONLY recommend actual telecommunications plans (mobile phone plans, data plans, 5G/LTE plans)
         - DO NOT recommend coupons, vouchers, gift cards, or lifestyle services
         - Focus on monthly mobile service plans with data, calls, and SMS
         - If context contains non-telecommunications items, ignore them completely
         
+        - If user asks for "plans" or "options", you can recommend 2-3 plans
+        - If user asks for "comparison", provide 2-3 plans for comparison
+        - Always match the number of recommendations to what the user specifically requested
         **Guidelines:**
         1. Engage naturally and friendly with users
         2. Understand user's call volume, data usage, and budget requirements
@@ -251,14 +255,14 @@ class RAGManager:
             
             Classification categories:
             1. "plan": Telecommunications plans/products only (5G, LTE, data, calls, monthly fees)
-            2. "service": Additional services only (roaming, security, quality improvement)
+            2. "vass": Additional services only (roaming, security, quality improvement)
             3. "coupon": Coupons/benefits only (movie discounts, shopping, lifestyle benefits)
             4. "comprehensive": Comprehensive recommendations (plans + services + coupons together)
             5. "general": General inquiries (greetings, customer service, policies)
             
             Keyword hints:
             - plan: plan, data, calls, SMS, monthly fee, 5G, LTE, unlimited, pricing
-            - service: service, roaming, security, additional, premium, add-on
+            - vass: service, roaming, security, additional, premium, add-on
             - coupon: coupon, discount, benefit, reward, movie, shopping, lifestyle
             - comprehensive: comprehensive, all, everything, package, total, complete, together
             - general: hello, inquiry, customer service, policy, terms, help
@@ -267,7 +271,7 @@ class RAGManager:
             
             Respond in JSON format only:
             {{
-                "intent": "plan|service|coupon|comprehensive|general",
+                "intent": "plan|vass|coupon|comprehensive|general",
                 "confidence": 0.0-1.0,
                 "reasoning": "brief explanation of classification decision"
             }}
@@ -498,8 +502,8 @@ class RAGManager:
                 if intent == "plan":
                     data_type_filter = "plan"
                     search_description = "통신 요금제"
-                elif intent == "service":
-                    data_type_filter = "service"
+                elif intent == "vass":
+                    data_type_filter = "vass"
                     search_description = "부가서비스"
                 elif intent == "coupon":
                     data_type_filter = "coupon"
@@ -520,8 +524,14 @@ class RAGManager:
                 
                 if matching_plans:
                     print(f"DEBUG: 조건에 맞는 {search_description} {len(matching_plans)}개 발견")
-                    
-                    top_plans = matching_plans[:3]
+                    requested_count = 1 
+                    if any(word in message.lower() for word in ['여러', '몇개', '비교', '옵션들', '선택지', '여러개']):
+                        requested_count = 3
+                    elif any(word in message.lower() for word in ['하나', '한개', '1개', '단일']):
+                        requested_count = 1
+                    print("*"*40)
+                    print(requested_count)
+                    top_plans = matching_plans[:requested_count]
                     
                     condition_text = ""
                     if price_conditions.get("price_max"):

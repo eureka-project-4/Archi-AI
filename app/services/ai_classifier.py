@@ -3,11 +3,9 @@ from app.core.message_classifier import MessageClassifier
 from app.models.message import MessageType, AuthMetadata
 from app.config import settings
 from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
-load_dotenv()
+
 class AIClassifier:
     def __init__(self):
-        # MessageClassifier 인스턴스 생성
         llm = ChatOpenAI(
             model=settings.OPENAI_MODEL,
             temperature=0.2,
@@ -15,23 +13,31 @@ class AIClassifier:
         )
         self.message_classifier = MessageClassifier(llm)
 
-    async def classify_message_type(self, content: str, metadata: AuthMetadata) -> MessageType:
+    async def classify_with_ai_response(self, user_input: str, ai_response: str) -> dict:
         """
-        consumer.py와의 인터페이스 맞춤
+        AI 응답까지 생성된 후 정확한 분류를 수행하는 메서드
+        processor.py에서 호출되어 정확한 분류 결과를 얻을 수 있음
         """
-        # 일단 USER_MESSAGE로 가정 (AI 응답이 아직 없으므로)
-        # 실제로는 processor에서 AI 응답 후 재분류됨
-        
-        # 간단한 키워드 기반 사전 분류
-        if any(word in content for word in ['추천', '알려', '찾아']):
-            if '키워드' in content or '관련' in content:
-                return MessageType.KEYWORD_RECOMMENDATION
-            else:
-                return MessageType.SUGGESTION
-        elif any(word in content for word in ['바꾸', '변경', '이제는']):
-            return MessageType.PREFERENCE_UPDATE
-        else:
-            return MessageType.USER_MESSAGE
+        try:
+            classification_result = self.message_classifier.classify_message(user_input, ai_response)
+            
+            return {
+                'message_type': classification_result.get('message_type', MessageType.GENERAL_RESPONSE),
+                'mentioned_plans': classification_result.get('mentioned_plans', []),
+                'reasoning': classification_result.get('reasoning', ''),
+                'confidence': classification_result.get('confidence', 0.0),
+                'has_pricing': classification_result.get('has_pricing', False)
+            }
+            
+        except Exception as e:
+            print(f"AI 응답 기반 분류 오류: {e}")
+            return {
+                'message_type': MessageType.GENERAL_RESPONSE,
+                'mentioned_plans': [],
+                'reasoning': f'분류 오류: {e}',
+                'confidence': 0.0,
+                'has_pricing': False
+            }
 
 # 인스턴스 생성
 ai_classifier = AIClassifier()
