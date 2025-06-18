@@ -1,7 +1,7 @@
 
 from fastapi import APIRouter, UploadFile, HTTPException
 from app.core.img_analyze.image_analyze import ImageAnalyzer
-from app.models.preference_tags import DATA_USAGE, CALL_SMS, NETWORK_PLAN, PREFERENCE_TAGS, FEW_SHOT
+from app.models.preference_tags import PREFERENCE_TAGS, CONTENT_TAGS, LIFE_TAGS, SELF_TAGS, HOBBY_TAGS, CONSUME_TAGS, FEW_SHOT
 import base64
 
 router = APIRouter()
@@ -22,7 +22,7 @@ async def analyze_image(file: UploadFile):
         # 2) ImageAnalyzer 호출
         result = analyzer.analyze_image_and_tags(base64_image)
 
-        ALL_TAGS = DATA_USAGE + CALL_SMS + NETWORK_PLAN + PREFERENCE_TAGS
+        ALL_TAGS = PREFERENCE_TAGS
         tags = result.get("tags", [])
 
         # 유효하지 않은 태그만 추출
