@@ -192,9 +192,9 @@ class RAGManager:
         if 'plan' in filename_lower:
             print(f"DEBUG: plan 타입으로 분류")
             return 'plan'
-        elif 'service' in filename_lower:
-            print(f"DEBUG: service 타입으로 분류")
-            return 'service'
+        elif 'vass' in filename_lower:
+            print(f"DEBUG: vass 타입으로 분류")
+            return 'vass'
         elif 'coupon' in filename_lower:
             print(f"DEBUG: coupon 타입으로 분류")
             return 'coupon'
@@ -414,7 +414,7 @@ class RAGManager:
     def get_search_filter(self, intent: str) -> Optional[Dict[str, str]]:
         filter_map = {
             "plan": {"type": "plan"},
-            "service": {"type": "service"}, 
+            "vass": {"type": "vass"}, 
             "coupon": {"type": "coupon"},
             "comprehensive": None,
             "general": None
@@ -682,24 +682,64 @@ class RAGManager:
                     if used_sources:
                         filtered_context = "\n\n".join([doc.page_content for doc in used_sources])
                         
-                        enhanced_prompt = f"""Based ONLY on the following verified data, answer the user's question.
+                        # intent에 따른 프롬프트 분기
+                        if intent == "vass":
+                            enhanced_prompt = f"""
+                            Based ONLY on the following verified data, answer the user's question about additional services (부가서비스).
+                            IMPORTANT: You MUST respond in Korean (한국어로 답변해주세요).
+                            INSTRUCTIONS:
+                            - List and explain the available additional services
+                            - Include service names, prices, and benefits
+                            - Group similar services if applicable (e.g., streaming services, security services)
+                            - Be clear about what each service offers
 
-CRITICAL RULE: If the user asks about a specific plan name that is NOT exactly found in the data below, you MUST respond with "죄송합니다. 해당 요금제를 현재 데이터에서 찾을 수 없습니다."
+                            Verified Additional Services Data:
+                            {filtered_context}
 
-DO NOT:
-- Make up plan names that don't exist in the data
-- Combine information from different plans 
-- Infer or guess pricing/features not explicitly stated
-- Use similar plan names as if they were the requested plan
+                            User Question: {message}
 
-ONLY provide information about plans that are explicitly mentioned in the verified data below.
+                            Provide a helpful response about the additional services based on the data above.
+                            """
 
-Verified Data:
-{filtered_context}
+                        elif intent == "coupon":
+                            enhanced_prompt = f"""
+                            Based ONLY on the following verified data, answer the user's question about coupons and benefits.
+                            IMPORTANT: You MUST respond in Korean (한국어로 답변해주세요).
+                            INSTRUCTIONS:
+                            - List available coupons and their benefits
+                            - Include discount amounts and validity periods if available
+                            - Explain how to use or redeem these benefits
+                            - Group by category if helpful (e.g., entertainment, shopping, lifestyle)
 
-User Question: {message}
+                            Verified Coupon Data:
+                            {filtered_context}
 
-Remember: Only answer about plans that are EXACTLY named in the verified data above. If the exact plan name is not found, clearly state it's not available."""
+                            User Question: {message}
+
+                            Provide a helpful response about the coupons and benefits based on the data above.
+                            """
+
+                        else:  # intent == "plan"
+                            enhanced_prompt = f"""
+                            Based ONLY on the following verified data, answer the user's question.
+                            IMPORTANT: You MUST respond in Korean (한국어로 답변해주세요).
+                            CRITICAL RULE: If the user asks about a specific plan name that is NOT exactly found in the data below, you MUST respond with "죄송합니다. 해당 요금제를 현재 데이터에서 찾을 수 없습니다."
+
+                            DO NOT:
+                            - Make up plan names that don't exist in the data
+                            - Combine information from different plans 
+                            - Infer or guess pricing/features not explicitly stated
+                            - Use similar plan names as if they were the requested plan
+
+                            ONLY provide information about plans that are explicitly mentioned in the verified data below.
+
+                            Verified Data:
+                            {filtered_context}
+
+                            User Question: {message}
+
+                            Remember: Only answer about plans that are EXACTLY named in the verified data above. If the exact plan name is not found, clearly state it's not available.
+                            """
                         
                         filtered_response = self.combine_docs_chain.invoke({
                             "input": enhanced_prompt,
@@ -708,21 +748,21 @@ Remember: Only answer about plans that are EXACTLY named in the verified data ab
                             "user_id": user_id
                         })
                         ai_response = str(filtered_response)
-                        print(f"DEBUG: 엄격한 검증으로 재생성된 응답")
-                
-                for i, source in enumerate(used_sources[:3]):
-                    print(f"DEBUG: 소스 {i+1} 타입: {source.metadata.get('type', 'unknown')}")
-                    print(f"DEBUG: 소스 {i+1} 파일: {source.metadata.get('source_file', 'unknown')}")
-                    print(f"DEBUG: 소스 {i+1} 내용: {source.page_content[:100]}...")
-            else:
-                response = self.combine_docs_chain.invoke({
-                    "input": message,
-                    "chat_history": chat_history_str,
-                    "context": [],
-                    "user_id": user_id
-                })
-                ai_response = str(response)
-                used_sources = []
+                        print(f"DEBUG: 엄격한 검증으로 재생성된 응답 (intent: {intent})")
+
+                    for i, source in enumerate(used_sources[:3]):
+                        print(f"DEBUG: 소스 {i+1} 타입: {source.metadata.get('type', 'unknown')}")
+                        print(f"DEBUG: 소스 {i+1} 파일: {source.metadata.get('source_file', 'unknown')}")
+                        print(f"DEBUG: 소스 {i+1} 내용: {source.page_content[:100]}...")
+                else:
+                    response = self.combine_docs_chain.invoke({
+                        "input": message,
+                        "chat_history": chat_history_str,
+                        "context": [],
+                        "user_id": user_id
+                    })
+                    ai_response = str(response)
+                    used_sources = []
             
             # 메시지 분류
             classification = self.message_classifier.classify_message(message, ai_response)
