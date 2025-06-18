@@ -6,14 +6,15 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.api import admin
 from app.api import chat
+from app.services.img_analyze import image_router
 from app.core.rag_manager import RAGManager
-from app.services.consumer import stream_consumer
+from app.services.consumer import stream_consumer , image_stream_consumer
 
 rag_manager = None
 print("🔥 Lifespan 함수 진입 전")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🔥 Lifespan 진입됨")  # 이게 안 뜨면 진짜 문제
+    print("🔥 Lifespan 진입됨")  
     global rag_manager
     print("🚀 AI 서버 시작 중...")
     
@@ -26,12 +27,19 @@ async def lifespan(app: FastAPI):
     consumer_task = asyncio.create_task(stream_consumer.start_consuming())
     print("Redis Streams 컨슈머 시작")
     
+     # Image Streams 컨슈머 시작
+    image_consumer_task = asyncio.create_task(image_stream_consumer.start_consuming())
+    print("Image Streams 컨슈머 시작")
+
     yield
     
     # 종료 시 정리
     print("AI 서버 종료 중...")
     stream_consumer.stop()
+    image_stream_consumer.stop()
     consumer_task.cancel()
+    image_consumer_task.cancel()
+
     try:
         await consumer_task
     except asyncio.CancelledError:
@@ -55,6 +63,7 @@ app.add_middleware(
 # 관리자 API만 포함
 app.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(chat.router, prefix="/chat", tags=["chat"]) #시연용으로 잠깐 살려둠
+app.include_router(image_router.router, prefix="/image", tags=["image"])
 @app.get("/")
 async def root():
     return {"message": "AI 처리 서버가 실행 중입니다"}
@@ -66,7 +75,8 @@ async def health_check():
         "service": "ai-server",
         "environment": settings.ENVIRONMENT,
         "rag_initialized": rag_manager is not None and rag_manager.rag_chain is not None,
-        "consumer_running": stream_consumer.running
+        "consumer_running": stream_consumer.running ,
+        "image_consumer_running": image_stream_consumer.running
     }
 
 if __name__ == "__main__":

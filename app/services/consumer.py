@@ -177,4 +177,59 @@ class StreamConsumer:
         self.running = False
         print("[INFO] 컨슈머 중지 요청")
 
+
+class ImageStreamConsumer:
+    def __init__(self):
+        self.running = False
+
+    async def start_consuming(self):
+        self.running = True
+        async with RedisService() as redis_service:
+            # Consumer Group 초기화
+            await redis_service.init_stream_group(
+                settings.IMAGE_REQUEST_STREAM,
+                settings.IMAGE_CONSUMER_GROUP
+            )
+            print(f"[INFO] 이미지 컨슈머 시작: {settings.IMAGE_REQUEST_STREAM}")
+
+            while self.running:
+                try:
+                    messages = await redis_service.consume_messages(
+                        stream_name=settings.IMAGE_REQUEST_STREAM,
+                        group_name=settings.IMAGE_CONSUMER_GROUP,
+                        consumer_name=settings.IMAGE_CONSUMER_NAME,
+                        count=1
+                    )
+                    for stream_name, stream_messages in messages:
+                        for message_id, message_data in stream_messages:
+                            await self._process_image_message(redis_service, message_id, message_data)
+                except Exception as e:
+                    print(f"[ERROR] 이미지 컨슈머 오류: {e}")
+                    await asyncio.sleep(5)
+
+    async def _process_image_message(self, redis_service, message_id, message_data):
+        """여기에 실제 이미지 분석 로직"""
+        print(f"[INFO] 이미지 요청 수신: {message_data}")
+
+        # 예: 가짜 분석 결과
+        response = {
+            "result": "이미지 분석 완료",
+            "original": message_data
+        }
+
+        # 결과를 이미지 응답 스트림에 전송
+        await redis_service.send_message(settings.IMAGE_RESPONSE_STREAM, response)
+
+        # ACK 처리
+        await redis_service.acknowledge_message(
+            settings.IMAGE_REQUEST_STREAM,
+            settings.IMAGE_CONSUMER_GROUP,
+            message_id
+        )
+
+    def stop(self):
+        self.running = False
+
+
 stream_consumer = StreamConsumer()
+image_stream_consumer = ImageStreamConsumer()
