@@ -40,9 +40,9 @@ class CSVVerificationSystem:
                     elif 'coupon' in csv_file.name.lower():
                         df['source_file'] = 'coupons' 
                         df['data_type'] = 'coupon'
-                    elif 'service' in csv_file.name.lower():
-                        df['source_file'] = 'services'
-                        df['data_type'] = 'service'
+                    elif 'vass' in csv_file.name.lower():
+                        df['source_file'] = 'vass'
+                        df['data_type'] = 'vass'
                     else:
                         df['source_file'] = csv_file.stem
                         df['data_type'] = 'unknown'
@@ -64,7 +64,7 @@ class CSVVerificationSystem:
     def _build_search_database(self):
         for _, row in self.plans_df.iterrows():
             name_candidates = []
-            for col in ['plan_name', 'name', 'product_name', 'service_name', 'title']:
+            for col in ['plan_name', 'name', 'product_name', 'vas_name', 'title','coupon_name']:
                 if col in row and pd.notna(row[col]):
                     name_candidates.append(str(row[col]).strip())
             
