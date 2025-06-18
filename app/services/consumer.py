@@ -1,180 +1,238 @@
+# app/services/consumer.py - 최종 수정 (메모리 저장 문제 해결)
 
 import asyncio
-from typing import Dict, Any
-from datetime import datetime, timezone
-from app.services.redis_service import RedisService
-from app.services.processor import message_processor
-from app.services.ai_classifier import ai_classifier
-from app.services.content_filter import content_filter
-from app.models.message import AiPromptMessage, MessageType
-from app.models.chat import ChatMessage
-from app.database import get_db 
+import json
+import redis.asyncio as redis
+from typing import Dict, Any, Optional
+import traceback
+from datetime import datetime
+
 from app.config import settings
 
 class StreamConsumer:
     def __init__(self):
-        self.running = False
+        self.redis_client: Optional[redis.Redis] = None
+        self.running: bool = False
+        self.consumer_group: str = "ai-processors"
+        self.consumer_name: str = "ai-server-1"
+        self.stream_name: str = "ai-request-stream"
         
-    async def start_consuming(self):
-        """메시지 소비 시작"""
-        self.running = True
-        
-        async with RedisService() as redis_service:
-            # Consumer Group 초기화
-            await redis_service.init_stream_group(
-                settings.REQUEST_STREAM, 
-                settings.CONSUMER_GROUP
-            )
-            
-            print(f"[INFO] 컨슈머 시작: {settings.REQUEST_STREAM}")
-            
-            while self.running:
-                try:
-                    # 메시지 읽기
-                    messages = await redis_service.consume_messages(
-                        stream_name=settings.REQUEST_STREAM,
-                        group_name=settings.CONSUMER_GROUP,
-                        consumer_name=settings.CONSUMER_NAME,
-                        count=1
-                    )
-                    
-                    # 메시지 처리
-                    for stream_name, stream_messages in messages:
-                        for message_id, message_data in stream_messages:
-                            await self._process_single_message(
-                                redis_service, message_id, message_data
-                            )
-                            
-                except Exception as e:
-                    print(f"[ERROR] 컨슈머 오류: {e}")
-                    await asyncio.sleep(5)  # 오류 시 5초 대기
-    
-    async def _process_single_message(self, redis_service: RedisService, message_id: str, message_data: Dict[str, str]):
-        """개별 메시지 처리"""
+    async def connect_redis(self) -> bool:
+        """Redis 연결 설정"""
         try:
-            print(f"\n[DEBUG] 원본 message_data: {message_data}")
-
-            # 메시지 파싱
-            parsed_data = redis_service.parse_message(message_data)
-            print(f"[INFO] 메시지 수신 - ID: {message_id}")
-            print(f"[DEBUG] 파싱된 데이터: {parsed_data}")
-
-            # Pydantic 모델 변환
-            ai_message = AiPromptMessage(**parsed_data)
-            print(f"[DEBUG] Pydantic 변환 성공 - userId: {ai_message.payload.user_id}, content: {ai_message.payload.content}")
-            print(f"[DEBUG] 초기 type 값: {ai_message.payload.type}")
-
-            # 1. 유저 메시지 저장
-            print(f"[STEP] 유저 메시지 DB 저장 시도")
-            chat_id = await self._save_user_message(ai_message)
-            print(f"[DB] 유저 메시지 저장 완료 - Chat ID: {chat_id}")
-
-            # 0단계: 금칙어 필터링
-            if await content_filter.contains_forbidden_content(ai_message.payload.content):
-                print(f"[WARN] 금칙어 감지됨: {ai_message.payload.content[:30]}")
-                response = await self._create_filtered_response(ai_message)
-            else:
-                # 1단계: 타입 분류
-                print(f"[STEP] 메시지 타입 분류 시도")
-                classified_type = await ai_classifier.classify_message_type(
-                    ai_message.payload.content, 
-                    ai_message.metadata
-                )
-                print(f"[INFO] 분류된 타입: {classified_type}")
-                ai_message.payload.type = classified_type
-
-                # 2단계: 메시지 처리
-                print(f"[STEP] 메시지 처리 시작")
-                response = await message_processor.process_message(ai_message)
-
-            # 3. 봇 응답 저장
-            print(f"[STEP] 봇 응답 DB 저장 시도")
-            bot_chat_id = await self._save_bot_response(response, chat_id)
-            print(f"[DB] 봇 응답 저장 완료 - Chat ID: {bot_chat_id}")
-
-            # 응답 메시지 ID 반영
-            response["messageId"] = str(bot_chat_id)
-            response["chatId"] = str(chat_id)
-
-            # 응답 Redis 전송
-            print(f"[STEP] Redis 응답 전송 시도")
-            await self._send_response(redis_service, response)
-            print(f"[INFO] 응답 전송 완료 - 타입: {response['type']}")
-
-            # ACK
-            print(f"[STEP] 메시지 ACK 처리")
-            await redis_service.acknowledge_message(
-                settings.REQUEST_STREAM,
-                settings.CONSUMER_GROUP,
-                message_id
+            self.redis_client = redis.Redis(
+                host=settings.REDIS_HOST,
+                port=settings.REDIS_PORT,
+                db=getattr(settings, 'REDIS_DB', 0),
+                password=getattr(settings, 'REDIS_PASSWORD', None),
+                decode_responses=True,
+                socket_connect_timeout=10,
+                socket_timeout=10,
+                retry_on_timeout=True
             )
-            print(f"[INFO] 메시지 ACK 완료")
-
+            
+            await self.redis_client.ping()
+            print(f"✅ Redis 연결 성공: {settings.REDIS_HOST}:{settings.REDIS_PORT}")
+            return True
+            
         except Exception as e:
-            print(f"[ERROR] 메시지 처리 실패 - ID: {message_id}, 에러: {e}")
+            print(f"❌ Redis 연결 실패: {e}")
+            return False
     
-    async def _save_user_message(self, ai_message: AiPromptMessage) -> int:
-        """유저 메시지 DB 저장 - chat_id 반환"""
-        async for db in get_db():
+    async def create_consumer_group(self) -> bool:
+        """컨슈머 그룹 생성"""
+        try:
+            await self.redis_client.xgroup_create(
+                self.stream_name, 
+                self.consumer_group, 
+                id='0', 
+                mkstream=True
+            )
+            print(f"✅ 컨슈머 그룹 '{self.consumer_group}' 생성됨")
+            return True
+        except redis.ResponseError as e:
+            if "BUSYGROUP" in str(e):
+                print(f"ℹ️ 컨슈머 그룹 '{self.consumer_group}' 이미 존재")
+                return True
+            else:
+                print(f"❌ 컨슈머 그룹 생성 실패: {e}")
+                return False
+    
+    async def start_consuming(self):
+        """메시지 컨슈밍 시작"""
+        print(f"[INFO] 컨슈머 시작: {self.stream_name}")
+        
+        if not await self.connect_redis():
+            print("❌ Redis 연결 실패로 컨슈머 시작 불가")
+            return
+        
+        if not await self.create_consumer_group():
+            print("❌ 컨슈머 그룹 생성 실패로 컨슈머 시작 불가")
+            return
+        
+        self.running = True
+        print(f"🚀 컨슈머 '{self.consumer_name}' 시작됨")
+        
+        while self.running:
             try:
-                message = ChatMessage(
-                    user_id=int(ai_message.payload.user_id),
-                    message=ai_message.payload.content,
-                    sender="USER",
-                    created_at=datetime.now(),
-                    message_type=ai_message.payload.type
+                print(f"👀 새 메시지 대기 중... ({datetime.now().strftime('%H:%M:%S')})")
+                
+                messages = await self.redis_client.xreadgroup(
+                    self.consumer_group,
+                    self.consumer_name,
+                    {self.stream_name: '>'},
+                    count=1,
+                    block=5000
                 )
-                db.add(message)
-                await db.commit()
-                await db.refresh(message)
-                return message.chat_id  # Primary Key 반환
+                
+                if messages:
+                    print(f"📨 새 메시지 수신!")
+                    
+                    for stream, msgs in messages:
+                        for message_id, fields in msgs:
+                            await self.process_message(message_id, fields)
+                
+            except asyncio.CancelledError:
+                print("🛑 컨슈머 취소 신호 수신")
+                break
             except Exception as e:
-                await db.rollback()
-                print(f"[ERROR] 유저 메시지 저장 실패: {e}")
-                raise e
-
-    async def _save_bot_response(self, response: Dict[str, Any], chat_id: int) -> int:
-        """봇 응답 DB 저장 - 기본 content만 저장"""
-        async for db in get_db():
+                print(f"❌ 컨슈머 오류: {e}")
+                await asyncio.sleep(2)
+        
+        self.running = False
+        print("[INFO] 컨슈머 중지됨")
+        if self.redis_client:
+            await self.redis_client.close()
+    
+    async def process_message(self, message_id: str, fields: Dict[str, Any]):
+        """메시지 처리"""
+        print(f"🔄 메시지 처리: {message_id}")
+        
+        try:
+            # JSON 파싱
+            message_data = None
+            
+            if 'data' in fields:
+                try:
+                    raw_data = fields['data']
+                    
+                    if isinstance(raw_data, str):
+                        parsed_once = json.loads(raw_data)
+                        
+                        if isinstance(parsed_once, str):
+                            message_data = json.loads(parsed_once)
+                            print(f"✅ 이중 JSON 파싱 성공")
+                        else:
+                            message_data = parsed_once
+                            print(f"✅ 단일 JSON 파싱 성공")
+                    else:
+                        message_data = raw_data
+                        
+                except json.JSONDecodeError as e:
+                    print(f"❌ JSON 파싱 실패: {e}")
+            
+            if message_data is None:
+                message_data = dict(fields)
+            
+            user_id = None
+            message = None
+            
+            if isinstance(message_data, dict):
+                if 'payload' in message_data:
+                    payload = message_data['payload']
+                    user_id = payload.get('userId') or payload.get('user_id')
+                    message = payload.get('content') or payload.get('message')
+                
+                if not user_id or not message:
+                    user_id = message_data.get('user_id') or message_data.get('userId')
+                    message = message_data.get('message') or message_data.get('content')
+            
+            if user_id is not None:
+                user_id = str(user_id)
+            
+            if not user_id or not message:
+                print(f"❌ 필수 필드 누락 - user_id: {user_id}, message: {message}")
+                return
+            
+            print(f"🎯 AI 처리 시작: user_id={user_id}, message='{message[:30]}...'")
+            
+            ai_response = await self.get_ai_response_with_memory(user_id, message)
+            from app.services.ai_classifier import ai_classifier
+            classification_result = await ai_classifier.classify_with_ai_response(
+                user_input=message,
+                ai_response=ai_response
+            )
+            print(f"🔍 메시지 분류 결과: {classification_result}")
+            response_data = {
+                'user_id': user_id,
+                'original_message': message,
+                'ai_response': ai_response,
+                'message_type': classification_result.get('message_type', 'GENERAL_RESPONSE').value,
+                'confidence_score': classification_result.get('confidence', 0.0),
+                'mentioned_plans': ','.join(classification_result['mentioned_plans']) if classification_result['mentioned_plans'] else '',
+                'processed_at': datetime.now().isoformat()
+            }
+            
+            await self.redis_client.xadd('ai-response-stream', response_data)
+            print(f"✅ 처리 완료: AI 응답 길이 {len(ai_response)}")
+                
+        except Exception as e:
+            print(f"❌ 처리 오류: {e}")
+            print(f"❌ 상세: {traceback.format_exc()}")
+        finally:
             try:
-                message = ChatMessage(
-                    user_id=int(response["userId"]),
-                    message=response["content"],  # 기본 메시지만 저장
-                    sender="BOT",
-                    created_at=datetime.now(),
-                    message_type=response["type"]
+                await self.redis_client.xack(
+                    self.stream_name, 
+                    self.consumer_group, 
+                    message_id
                 )
-                db.add(message)
-                await db.commit()
-                await db.refresh(message)
-                return message.chat_id
-            except Exception as e:
-                await db.rollback()
-                print(f"[ERROR] 봇 응답 저장 실패: {e}")
-                raise e
+                print(f"✅ ACK: {message_id}")
+            except Exception as ack_error:
+                print(f"❌ ACK 실패: {ack_error}")
     
-    async def _create_filtered_response(self, message: AiPromptMessage) -> Dict[str, Any]:
-        """금칙어 감지 시 응답 생성"""
-        return {
-            "messageId": "temp",  # DB 저장 후 덮어씀
-            "userId": message.payload.user_id,
-            "content": "부적절한 표현이 감지되었습니다. 정중한 언어를 사용해 주세요.",
-            "type": MessageType.FILTERED_MESSAGE,
-            "sender": "BOT",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "bundleRecommendations": "",
-            "extractedKeywords": "",
-            "updatedPreference": ""
-        }
-    
-    async def _send_response(self, redis_service: RedisService, response: Dict[str, Any]):
-        """응답 전송"""
-        await redis_service.send_message(settings.RESPONSE_STREAM, response)
-        print(f"[INFO] 응답 전송 완료 - 타입: {response['type']}")
+    async def get_ai_response_with_memory(self, user_id: str, message: str) -> str:
+        """메모리 저장이 포함된 AI 응답 생성"""
+        try:
+            from app.main import rag_manager
+            
+            if not rag_manager:
+                return "죄송합니다. AI 시스템이 초기화되지 않았습니다."
+            
+            from app.core.content_filter import content_filter
+            print(f"🤖 RAG 매니저를 통한 AI 처리...")
+            is_inappropriate = content_filter.contains_forbidden_content(message)
+            if is_inappropriate:
+                print(f"🚫 부적절한 메시지 감지됨: user_id={user_id}")
+                return "죄송합니다. 부적절한 내용이 포함된 메시지는 처리할 수 없습니다. 정중하고 건전한 대화를 부탁드립니다."
+            
+           
+            if hasattr(rag_manager, 'chat'):
+                print(f"📞 chat 메서드 호출")
+                result = rag_manager.chat(user_id, message)
+            else:
+                print(f"❌ chat 메서드 없음")
+                return "죄송합니다. AI 시스템에 문제가 발생했습니다."
+            
+            # 결과 처리
+            if isinstance(result, str):
+                return result
+            elif isinstance(result, dict):
+                return result.get('response', str(result))
+            else:
+                return str(result)
+                
+        except Exception as e:
+            print(f"❌ AI 처리 오류: {e}")
+            # JSON 직렬화 오류인 경우 특별 처리
+            if "JSON serializable" in str(e) or "MessageType" in str(e):
+                print(f"🔧 JSON 직렬화 오류 감지 - 간단한 응답 반환")
+                return f"안녕하세요 {user_id}님! 메시지를 잘 받았습니다. 무엇을 도와드릴까요?"
+            return "죄송합니다. 처리 중 오류가 발생했습니다."
     
     def stop(self):
         """컨슈머 중지"""
-        self.running = False
         print("[INFO] 컨슈머 중지 요청")
+        self.running = False
 
+# 전역 인스턴스
 stream_consumer = StreamConsumer()

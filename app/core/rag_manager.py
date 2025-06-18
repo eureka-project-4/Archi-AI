@@ -192,9 +192,9 @@ class RAGManager:
         if 'plan' in filename_lower:
             print(f"DEBUG: plan 타입으로 분류")
             return 'plan'
-        elif 'vass' in filename_lower:
-            print(f"DEBUG: vass 타입으로 분류")
-            return 'vass'
+        elif 'service' in filename_lower:
+            print(f"DEBUG: service 타입으로 분류")
+            return 'service'
         elif 'coupon' in filename_lower:
             print(f"DEBUG: coupon 타입으로 분류")
             return 'coupon'
@@ -210,11 +210,15 @@ class RAGManager:
         **Current User: {user_id}**
         
         **CRITICAL INSTRUCTIONS:**
+        - If user asks for "one plan" or "a plan", recommend ONLY ONE best plan
         - ONLY recommend actual telecommunications plans (mobile phone plans, data plans, 5G/LTE plans)
         - DO NOT recommend coupons, vouchers, gift cards, or lifestyle services
         - Focus on monthly mobile service plans with data, calls, and SMS
         - If context contains non-telecommunications items, ignore them completely
         
+        - If user asks for "plans" or "options", you can recommend 2-3 plans
+        - If user asks for "comparison", provide 2-3 plans for comparison
+        - Always match the number of recommendations to what the user specifically requested
         **Guidelines:**
         1. Engage naturally and friendly with users
         2. Understand user's call volume, data usage, and budget requirements
@@ -251,14 +255,14 @@ class RAGManager:
             
             Classification categories:
             1. "plan": Telecommunications plans/products only (5G, LTE, data, calls, monthly fees)
-            2. "service": Additional services only (roaming, security, quality improvement)
+            2. "vass": Additional services only (roaming, security, quality improvement)
             3. "coupon": Coupons/benefits only (movie discounts, shopping, lifestyle benefits)
             4. "comprehensive": Comprehensive recommendations (plans + services + coupons together)
             5. "general": General inquiries (greetings, customer service, policies)
             
             Keyword hints:
             - plan: plan, data, calls, SMS, monthly fee, 5G, LTE, unlimited, pricing
-            - service: service, roaming, security, additional, premium, add-on
+            - vass: service, roaming, security, additional, premium, add-on
             - coupon: coupon, discount, benefit, reward, movie, shopping, lifestyle
             - comprehensive: comprehensive, all, everything, package, total, complete, together
             - general: hello, inquiry, customer service, policy, terms, help
@@ -267,7 +271,7 @@ class RAGManager:
             
             Respond in JSON format only:
             {{
-                "intent": "plan|service|coupon|comprehensive|general",
+                "intent": "plan|vass|coupon|comprehensive|general",
                 "confidence": 0.0-1.0,
                 "reasoning": "brief explanation of classification decision"
             }}
@@ -461,15 +465,17 @@ class RAGManager:
             )
     
     def load_user_context(self, user_id: str) -> tuple:
+        user_id = str(user_id)
         chat_history, conversation_summary, is_existing_user = self.memory_manager.load_user_memory(user_id)
         return chat_history, conversation_summary, is_existing_user
     
     def chat(self, user_id: str, message: str) -> Dict[str, Any]:
+        user_id = str(user_id)
         return self.chat_with_verification(user_id, message)
     
     def chat_with_verification(self, user_id: str, message: str) -> Dict[str, Any]:
         try:
-            
+            user_id = str(user_id)
             intent_analysis = self.analyze_query_intent(message)
             intent = intent_analysis["intent"]
             
@@ -496,8 +502,8 @@ class RAGManager:
                 if intent == "plan":
                     data_type_filter = "plan"
                     search_description = "통신 요금제"
-                elif intent == "service":
-                    data_type_filter = "service"
+                elif intent == "vass":
+                    data_type_filter = "vass"
                     search_description = "부가서비스"
                 elif intent == "coupon":
                     data_type_filter = "coupon"
@@ -518,8 +524,14 @@ class RAGManager:
                 
                 if matching_plans:
                     print(f"DEBUG: 조건에 맞는 {search_description} {len(matching_plans)}개 발견")
-                    
-                    top_plans = matching_plans[:3]
+                    requested_count = 1 
+                    if any(word in message.lower() for word in ['여러', '몇개', '비교', '옵션들', '선택지', '여러개']):
+                        requested_count = 3
+                    elif any(word in message.lower() for word in ['하나', '한개', '1개', '단일']):
+                        requested_count = 1
+                    print("*"*40)
+                    print(requested_count)
+                    top_plans = matching_plans[:requested_count]
                     
                     condition_text = ""
                     if price_conditions.get("price_max"):
@@ -546,7 +558,7 @@ class RAGManager:
                         "timestamp": datetime.now().isoformat(),
                         "human": message,
                         "ai": ai_response,
-                        "message_type": MessageType.SUGGESTION.value,  # Enum을 문자열로 변환
+                        "message_type": MessageType.SUGGESTION,  
                         "query_intent": intent
                     }
                     
@@ -582,7 +594,7 @@ class RAGManager:
                         return {
                             "response": f"죄송합니다. '{plan_name}' 요금제는 현재 제공되지 않는 요금제입니다. 다른 요금제를 추천해드릴까요?",
                             "user_id": user_id,
-                            "message_type": MessageType.BLOCKED_MESSAGE.value,  # Enum을 문자열로 변환
+                            "message_type": MessageType.BLOCKED_MESSAGE,
                             "mentioned_plans": [plan_name],
                             "confidence_score": verification['confidence'],
                             "verification_status": "차단됨 - 존재하지 않는 요금제",
@@ -592,23 +604,23 @@ class RAGManager:
                         print(f"DEBUG: 요금제 '{plan_name}' 정확히 매칭됨 - CSV 직접 사용")
                         plan_info = verification['matched_plan']
                         ai_response = f"""
-    {plan_name} 요금제 정보를 안내해드리겠습니다.
+{plan_name} 요금제 정보를 안내해드리겠습니다.
 
-    **{plan_name}**
-    - 월 요금: {plan_info['price']:,}원
-    - 데이터: {plan_info['data']}
-    - 통화: {plan_info['calls']}
-    - 문자: {plan_info['sms']}
-    - 혜택: {plan_info['benefit']}
+**{plan_name}**
+- 월 요금: {plan_info['price']:,}원
+- 데이터: {plan_info['data']}
+- 통화: {plan_info['calls']}
+- 문자: {plan_info['sms']}
+- 혜택: {plan_info['benefit']}
 
-    이 요금제에 대해 더 궁금한 점이 있으시면 언제든지 문의해주세요.
+이 요금제에 대해 더 궁금한 점이 있으시면 언제든지 문의해주세요.
                         """
                         
                         conversation_entry = {
                             "timestamp": datetime.now().isoformat(),
                             "human": message,
                             "ai": ai_response.strip(),
-                            "message_type": MessageType.SUGGESTION.value,  # Enum을 문자열로 변환
+                            "message_type": "SUGGESTION",
                             "query_intent": intent
                         }
                         
@@ -670,42 +682,24 @@ class RAGManager:
                     if used_sources:
                         filtered_context = "\n\n".join([doc.page_content for doc in used_sources])
                         
-                        # 특정 요금제를 물어보는 경우와 추천을 요청하는 경우를 구분
-                        if asked_plans:  # 특정 요금제명이 언급된 경우
-                            enhanced_prompt = f"""Based ONLY on the following verified data, answer the user's question.
+                        enhanced_prompt = f"""Based ONLY on the following verified data, answer the user's question.
 
-    CRITICAL RULE: If the user asks about a specific plan name that is NOT exactly found in the data below, you MUST respond with "죄송합니다. 해당 요금제를 현재 데이터에서 찾을 수 없습니다."
+CRITICAL RULE: If the user asks about a specific plan name that is NOT exactly found in the data below, you MUST respond with "죄송합니다. 해당 요금제를 현재 데이터에서 찾을 수 없습니다."
 
-    DO NOT:
-    - Make up plan names that don't exist in the data
-    - Combine information from different plans 
-    - Infer or guess pricing/features not explicitly stated
-    - Use similar plan names as if they were the requested plan
+DO NOT:
+- Make up plan names that don't exist in the data
+- Combine information from different plans 
+- Infer or guess pricing/features not explicitly stated
+- Use similar plan names as if they were the requested plan
 
-    ONLY provide information about plans that are explicitly mentioned in the verified data below.
+ONLY provide information about plans that are explicitly mentioned in the verified data below.
 
-    Verified Data:
-    {filtered_context}
+Verified Data:
+{filtered_context}
 
-    User Question: {message}
+User Question: {message}
 
-    Remember: Only answer about plans that are EXACTLY named in the verified data above. If the exact plan name is not found, clearly state it's not available."""
-                        else:  # 추천이나 조건 기반 질문인 경우
-                            enhanced_prompt = f"""Based on the following data, provide recommendations or information to answer the user's question.
-
-    You are a helpful telecommunications plan advisor. Use the verified data below to:
-    - Recommend suitable plans based on user needs
-    - Compare different options
-    - Explain features and benefits
-    - Answer general questions about telecommunications services
-
-    Verified Data:
-    {filtered_context}
-
-    User Question: {message}
-    Previous Conversation: {chat_history_str}
-
-    Please provide a helpful, personalized response based on the user's needs and the available data."""
+Remember: Only answer about plans that are EXACTLY named in the verified data above. If the exact plan name is not found, clearly state it's not available."""
                         
                         filtered_response = self.combine_docs_chain.invoke({
                             "input": enhanced_prompt,
@@ -758,7 +752,7 @@ class RAGManager:
                 "timestamp": datetime.now().isoformat(),
                 "human": message,
                 "ai": ai_response,
-                "message_type": message_type.value if hasattr(message_type, 'value') else message_type,  # Enum을 문자열로 변환
+                "message_type": message_type,
                 "query_intent": intent
             }
             
@@ -770,7 +764,7 @@ class RAGManager:
                 )
             
             self.memory_manager.save_user_memory(user_id, chat_history, conversation_summary)
-            
+            user_id = int(user_id)
             return {
                 "response": ai_response,
                 "user_id": user_id,
@@ -842,6 +836,7 @@ class RAGManager:
         ]
     
     def get_user_statistics(self, user_id: str) -> Dict[str, Any]:
+        user_id = str(user_id)
         chat_history, conversation_summary, _ = self.memory_manager.load_user_memory(user_id)
         stats = self.memory_manager.get_user_statistics(user_id, chat_history, conversation_summary)
         

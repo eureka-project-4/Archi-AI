@@ -17,19 +17,21 @@ class MessageClassifier:
 
         사용자 입력: {human_input}
         AI 응답: {ai_response}
-
+        **중요: mentioned_plans는 AI가 실제로 추천한 요금제만 포함하세요.**
+        - "추천드립니다", "권해드립니다"와 함께 언급된 요금제만 포함
+        - 단순히 비교용으로 언급된 요금제는 제외
+        - "대신에", "또는" 같은 대안으로 언급된 것도 제외
         분류 기준:
-        - SUGGESTION: 사용자 성향/프로필 기반 맞춤형 추천. "당신에게 맞는", "고객님께 추천", "프로필 기반" 등
-        - KEYWORD_RECOMMENDATION: 특정 키워드나 조건 기반 추천. "~관련 요금제", "데이터 많은", "저렴한" 등
+        - SUGGESTION: 사용자 성향/프로필 기반 맞춤형 추천. "조건에 맞는", "고객님께 추천", "프로필 기반" 등
         - PREFERENCE_UPDATE: 사용자 선호도 변경 관련. "이제는 ~를 선호", "~로 바꾸고 싶어", "요즘은" 등
         - PROACTIVE_SUGGESTION: 시스템 주도적 추천. "이번 달 추천", "새로운 요금제 출시", "정기 추천" 등
         - GENERAL_RESPONSE: 일반 대화, 인사, 단순 정보 제공, 질문 답변
         - USER_MESSAGE: 사용자가 보낸 원본 메시지 (분류 불필요)
         - FILTERED_MESSAGE: 부적절한 내용 감지됨 (욕설, 비속어 등)
-
+        
         JSON만 응답:
         {{
-            "message_type": "위 7가지 타입 중 하나",
+            "message_type": "위 6가지 타입 중 하나",
             "mentioned_plans": ["언급된 요금제명들"],
             "has_pricing": true/false,
             "confidence": 0.0-1.0
@@ -40,16 +42,19 @@ class MessageClassifier:
     
     def classify_message(self, human_input: str, ai_response: str) -> Dict[str, Any]:
         try:
+            # 실제로 체인을 호출
             result = self.classification_chain.invoke({
                 "human_input": human_input,
                 "ai_response": ai_response
             })
             
+            # JSON 추출
             if '```json' in result:
                 json_match = re.search(r'```json\s*(\{.*?\})\s*```', result, re.DOTALL)
                 if json_match:
                     result = json_match.group(1)
             
+            # JSON 파싱
             data = json.loads(result)
             llm_type_str = data.get("message_type", "GENERAL_RESPONSE")
             llm_plans = data.get("mentioned_plans", [])
@@ -57,7 +62,6 @@ class MessageClassifier:
             # 문자열을 MessageType Enum으로 변환
             type_mapping = {
                 "SUGGESTION": MessageType.SUGGESTION,
-                "KEYWORD_RECOMMENDATION": MessageType.KEYWORD_RECOMMENDATION,
                 "PREFERENCE_UPDATE": MessageType.PREFERENCE_UPDATE,
                 "PROACTIVE_SUGGESTION": MessageType.PROACTIVE_SUGGESTION,
                 "GENERAL_RESPONSE": MessageType.GENERAL_RESPONSE,
@@ -68,25 +72,21 @@ class MessageClassifier:
             }
             
             llm_type = type_mapping.get(llm_type_str, MessageType.GENERAL_RESPONSE)
-
-            # Fallback (더 엄격한 정규식 적용)
-            if not llm_plans:
-                pattern = r'([가-힣A-Za-z0-9\- ]{2,}(?:요금제|플랜))'
-                for match in re.findall(pattern, ai_response):
-                    cleaned = match.strip()
-                    if any(x in cleaned for x in ['추천', '있', '알려', '문의', '주세요', '있는', '추천해', '추천해줘']):
-                        continue
-                    llm_plans.append(cleaned)
             
             return {
                 "message_type": llm_type,
-                "mentioned_plans": list(set(llm_plans)),
-                "reasoning": "LLM+정규식"
+                "mentioned_plans": llm_plans,
+                "confidence": data.get("confidence", 0.8),
+                "has_pricing": data.get("has_pricing", False),
+                "reasoning": "LLM 분석"
             }
             
         except Exception as e:
+            print(f"분류 오류: {e}")
             return {
                 "message_type": MessageType.GENERAL_RESPONSE,
                 "mentioned_plans": [],
-                "reasoning": f"오류: {e}"
+                "confidence": 0.0,
+                "has_pricing": False,
+                "reasoning": f"분류 실패: {e}"
             }
