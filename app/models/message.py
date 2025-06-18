@@ -10,6 +10,7 @@ class MessageType(Enum):
     GENERAL_RESPONSE = "GENERAL_RESPONSE" #평범한 대화
     FILTERED_MESSAGE = "FILTERED_MESSAGE" #욕설 필터링
     BLOCKED_MESSAGE = "BLOCKED_MESSAGE" #없는 요금제
+    IMAGE_ANALYSIS = "IMAGE_ANALYSIS" #이미지 분석
 
 class AuthMetadata(BaseModel):
     age_code: str = Field(alias="ageCode")
