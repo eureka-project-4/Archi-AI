@@ -6,7 +6,7 @@ import os
 import asyncio
 import signal
 from pathlib import Path
-
+from app.services.consumer import stream_consumer , image_stream_consumer
 # 출력 강제 플러시
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
@@ -88,7 +88,7 @@ def initialize_system():
 async def start_consumer():
     """컨슈머 시작"""
     global consumer_task
-    
+    global image_consumer_task
     try:
         force_print("🎧 컨슈머 시작 시도...")
         
@@ -97,8 +97,13 @@ async def start_consumer():
         else:
             force_print("❌ Redis 연결 실패")
             return False
-        
+        if await image_consumer_task.connect_redis():
+            force_print("✅ Redis 연결 성공")
+        else:
+            force_print("❌ Redis 연결 실패")
+            return False
         consumer_task = asyncio.create_task(stream_consumer.start_consuming())
+        image_consumer_task = asyncio.create_task(image_stream_consumer.start_consuming())
         force_print("✅ 컨슈머 태스크 생성됨")
         
         return True
