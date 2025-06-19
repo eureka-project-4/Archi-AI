@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.9-slim
 
 WORKDIR /app
 
@@ -16,4 +16,5 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--lifespan", "on"]
+# lifespan 플래그 제거 및 안정적인 설정 사용
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

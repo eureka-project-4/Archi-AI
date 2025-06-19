@@ -1,10 +1,10 @@
 from .base import BaseSettings
 class DockerSettings(BaseSettings):
-    DATA_PATH: str = "/app/data"
-    PRICING_DATA_DIR: str = "/app/data/pricing"
-    VECTOR_STORE_DIR: str = "/app/data/vectors"
-    MEMORY_DIR: str = "/app/data/user_memories"
-    EXPORT_DIR: str = "/app/data/chat_history"
+    DATA_PATH: str = "/app/app/data/"
+    PRICING_DATA_DIR: str = DATA_PATH+"pricing"
+    VECTOR_STORE_DIR: str = DATA_PATH+"vectors"
+    MEMORY_DIR: str = DATA_PATH+"user_memories"
+    EXPORT_DIR: str = DATA_PATH+"chat_history"
 
     DB_HOST: str
     DB_PORT: int
@@ -13,7 +13,7 @@ class DockerSettings(BaseSettings):
     DB_PASSWORD: str
 
     OPENAI_API_KEY: str
-    OPENAI_MODEL: str = "gpt-3.5-turbo"
+    OPENAI_MODEL: str = "gpt-4o-mini"
     TEMPERATURE: float = 0.7
     MAX_TOKENS: int = 1024
 
