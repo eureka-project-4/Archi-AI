@@ -10,6 +10,7 @@ class MessageType(Enum):
     PROACTIVE_SUGGESTION = "PROACTIVE_SUGGESTION"
     GENERAL_RESPONSE = "GENERAL_RESPONSE"
     FILTERED_MESSAGE = "FILTERED_MESSAGE"
+    IMAGE_ANALYSIS = "IMAGE_ANALYSIS"
 
 class AuthMetadata(BaseModel):
     age_code: str = Field(alias="ageCode")

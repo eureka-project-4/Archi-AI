@@ -66,3 +66,4 @@ class ImageAnalyzer:
         result = json.loads(clean_content)
 
         return result
+analyzer = ImageAnalyzer()

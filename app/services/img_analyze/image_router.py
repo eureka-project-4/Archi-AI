@@ -10,15 +10,14 @@ analyzer = ImageAnalyzer()
 @router.post("/analyze-image")
 async def analyze_image(file: UploadFile):
     """
-    사용자가 업로드한 배터리 스크린샷을 분석하여
+I    사용자가 업로드한 배터리 스크린샷을 분석하여
     - 1문장 성향 요약
     - 통신 성향 + 선호 태그 추출
     """
     try:
         # 1) 파일 읽고 Base64 인코딩
         contents = await file.read()
-        base64_image = base64.b64encode(contents).decode("utf-8")
-
+        base64_image = base64.b64encode(contents).decode('utf-8')
         # 2) ImageAnalyzer 호출
         result = analyzer.analyze_image_and_tags(base64_image)
 

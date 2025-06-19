@@ -10,7 +10,7 @@ from app.models.message import AiPromptMessage, MessageType
 from app.models.chat import ChatMessage
 from app.database import get_db 
 from app.config import settings
-
+from app.services.img_analyze import image_router
 class StreamConsumer:
     def __init__(self):
         self.running = False
@@ -177,11 +177,13 @@ class StreamConsumer:
         self.running = False
         print("[INFO] 컨슈머 중지 요청")
 
+import json
 
 class ImageStreamConsumer:
     def __init__(self):
         self.running = False
-
+        from app.core.img_analyze.image_analyze import analyzer
+        self.analyzer = analyzer
     async def start_consuming(self):
         self.running = True
         async with RedisService() as redis_service:
@@ -202,33 +204,74 @@ class ImageStreamConsumer:
                     )
                     for stream_name, stream_messages in messages:
                         for message_id, message_data in stream_messages:
-                            await self._process_image_message(redis_service, message_id, message_data)
+                            await self._process_image_message(
+                                redis_service, message_id, message_data
+                            )
                 except Exception as e:
                     print(f"[ERROR] 이미지 컨슈머 오류: {e}")
                     await asyncio.sleep(5)
 
     async def _process_image_message(self, redis_service, message_id, message_data):
-        """여기에 실제 이미지 분석 로직"""
-        print(f"[INFO] 이미지 요청 수신: {message_data}")
+        print(f"[INFO] 📸 Raw message_data: {message_data}")
 
-        # 예: 가짜 분석 결과
-        response = {
-            "result": "이미지 분석 완료",
-            "original": message_data
-        }
+        try:
 
-        # 결과를 이미지 응답 스트림에 전송
-        await redis_service.send_message(settings.IMAGE_RESPONSE_STREAM, response)
+            # ✅ keys 찍기 (이미 확인됨)
+            print(f"[DEBUG] Message Data Keys: {message_data.keys()}")
 
-        # ACK 처리
-        await redis_service.acknowledge_message(
-            settings.IMAGE_REQUEST_STREAM,
-            settings.IMAGE_CONSUMER_GROUP,
-            message_id
-        )
+            # ✅ robust: str or bytes 둘 다 대응
+            payload_raw = (
+                message_data.get("payload") or
+                message_data.get(b"payload")
+            )
+
+            if payload_raw is None:
+                raise ValueError("Payload not found!")
+
+            # ✅ robust decode
+            if isinstance(payload_raw, bytes):
+                payload_raw = payload_raw.decode()
+
+            payload = json.loads(payload_raw)
+
+            print(f"[INFO] Decoded payload: {payload}")
+
+            # ✅ 이후 동일
+            user_id = payload["userId"]
+            base64_image = payload["image"]
+
+            print(f"[INFO] ✅ Parsed user_id: {user_id}")
+            
+            result = self.analyzer.analyze_image_and_tags(base64_image)
+            print(f"[INFO] ✅ Analysis result: {result}")
+
+            # 5️⃣ 응답 전송
+            response = {
+                "user_id": user_id,
+                "summary": result["summary"],
+                "tags": result["tags"],
+                "message_type" : "IMAGE_ANALYSIS"
+            }
+            await redis_service.send_message(
+                settings.IMAGE_RESPONSE_STREAM,
+                response
+            )
+            print(f"[INFO] ✅ Response sent to {settings.IMAGE_RESPONSE_STREAM}")
+
+        except Exception as e:
+            print(f"[ERROR] 분석 중 오류: {e}")
+
+        finally:
+            await redis_service.acknowledge_message(
+                settings.IMAGE_REQUEST_STREAM,
+                settings.IMAGE_CONSUMER_GROUP,
+                message_id
+            )
+            print(f"[INFO] ✅ ACK 완료: {message_id}")
 
     def stop(self):
         self.running = False
+
 
 
 stream_consumer = StreamConsumer()
