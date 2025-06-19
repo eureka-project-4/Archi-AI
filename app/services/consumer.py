@@ -8,6 +8,7 @@ import traceback
 from datetime import datetime
 
 from app.config import settings
+from app.services.redis_service import RedisService
 
 class StreamConsumer:
     def __init__(self):

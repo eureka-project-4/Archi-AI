@@ -104,11 +104,7 @@ async def start_consumer():
         else:
             force_print("❌ Redis 연결 실패")
             return False
-        if await image_stream_consumer.connect_redis():
-            force_print("✅ Redis 연결 성공")
-        else:
-            force_print("❌ Redis 연결 실패")
-            return False
+
         consumer_task = asyncio.create_task(stream_consumer.start_consuming())
         image_consumer_task = asyncio.create_task(image_stream_consumer.start_consuming())
         force_print("✅ 컨슈머 태스크 생성됨")
@@ -116,7 +112,7 @@ async def start_consumer():
         
         print("컨슈머 시작")
             
-        yield
+        return True
 
     except Exception as e:
         force_print(f"❌ 컨슈머 시작 실패: {e}")
