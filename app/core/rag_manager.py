@@ -204,29 +204,18 @@ class RAGManager:
     
     def _setup_chain(self):
         system_prompt = """
-        You are an expert telecommunications plan recommendation specialist. 
+        You are an expert telecommunications service recommendation specialist. 
         Provide personalized recommendations based on user needs and usage patterns.
         
         **Current User: {user_id}**
         
-        **CRITICAL INSTRUCTIONS:**
-        - If user asks for "one plan" or "a plan", recommend ONLY ONE best plan
-        - ONLY recommend actual telecommunications plans (mobile phone plans, data plans, 5G/LTE plans)
-        - DO NOT recommend coupons, vouchers, gift cards, or lifestyle services
-        - Focus on monthly mobile service plans with data, calls, and SMS
-        - If context contains non-telecommunications items, ignore them completely
-        
-        - If user asks for "plans" or "options", you can recommend 2-3 plans
-        - If user asks for "comparison", provide 2-3 plans for comparison
-        - Always match the number of recommendations to what the user specifically requested
         **Guidelines:**
         1. Engage naturally and friendly with users
-        2. Understand user's call volume, data usage, and budget requirements
-        3. Provide accurate recommendations based on the provided plan information
+        2. Understand user's needs and provide accurate recommendations
+        3. Recommend services based on the provided data and context
         4. Remember previous conversations and maintain context
         5. Clearly explain recommendation reasons
-        6. For returning users, provide personalized service based on conversation history
-        7. **Important**: Only recommend plans that actually exist. Verify plan names and information accurately.
+        6. Only recommend items that actually exist in the provided data
         
         **Context Information:**
         {context}
@@ -428,7 +417,7 @@ class RAGManager:
         search_filter = self.get_search_filter(intent)
         
         search_k = settings.RETRIEVAL_K * 3
-        if intent == "plan":
+        if intent == "plan" or "vass" or "coupon":
             search_k = max(15, search_k)
         elif intent == "comprehensive":
             search_k = max(20, search_k)
@@ -685,164 +674,221 @@ class RAGManager:
                     }
                     
                     # 각 카테고리별로 독립적으로 처리
-                    for category in ['plan', 'vass', 'coupon']:
-                        print(f"DEBUG: Processing {category} in comprehensive mode")
+                    if intent == 'comprehensive':
+                        print("DEBUG: Comprehensive mode - executing each intent separately")
                         
-                        # 해당 카테고리의 retriever 가져오기
-                        category_retriever = self.get_filtered_retriever(category)
+                        # 각 카테고리별 결과를 저장할 딕셔너리
+                        category_results = {
+                            'plan': None,
+                            'vass': None,
+                            'coupon': None
+                        }
                         
-                        if category_retriever:
-                            # 카테고리별 RAG chain 생성
-                            temp_category_chain = create_retrieval_chain(
-                                category_retriever,
-                                self.combine_docs_chain
-                            )
-                            
-                            # 카테고리별로 다른 메시지 생성
-                            if category == 'plan':
-                                category_message = f"{message} 통신 요금제 하나만 추천해주세요"
-                            elif category == 'vass':
-                                category_message = f"{message} 부가서비스 하나만 추천해주세요"
-                            else:  # coupon
-                                category_message = f"{message} 쿠폰 하나만 추천해주세요"
-                            
-                            # RAG chain 실행
-                            category_response = temp_category_chain.invoke({
-                                "input": category_message,
-                                "chat_history": chat_history_str,
-                                "user_id": user_id
-                            })
-                            
-                            category_ai_response = category_response.get("answer", "")
-                            category_sources = category_response.get("context", [])
-                            
-                            search_filter = self.get_search_filter(category)
-                            if search_filter:
-                                original_count = len(category_sources)
-                                category_sources = [doc for doc in category_sources if doc.metadata.get('type') == search_filter.get('type')]
-                                print(f"DEBUG: {category} - filtered sources: {len(category_sources)} (from {original_count})")
+                        # 각 카테고리별로 독립적으로 처리
+                        for category in ['plan', 'vass', 'coupon']:
+                            print(f"DEBUG: Processing {category} in comprehensive mode")
+                            category_retriever = self.get_filtered_retriever(category)
+                            if category_retriever:
+                                temp_category_chain = create_retrieval_chain(
+                                    category_retriever,
+                                    self.combine_docs_chain
+                                )
+                                extracted_condition = "없음" 
+                                try:
+                                    category_condition_chain = self.get_category_condition_chain()
+                                    extracted_condition = category_condition_chain.invoke({
+                                        "user_message": message,
+                                        "category": category
+                                    }).strip()
+                                except Exception as e:
+                                    print(f"DEBUG: 조건 추출 실패: {e}")
+                                    extracted_condition = "없음"
+                                
+                                if category == 'plan':
+                                    search_message = "요금제 추천"
+                                elif category == 'vass':
+                                    search_message = "부가서비스 추천"
+                                else:
+                                    search_message = "쿠폰 추천"
+                                
+                                category_response = temp_category_chain.invoke({
+                                    "input": search_message,
+                                    "chat_history": chat_history_str,
+                                    "user_id": user_id
+                                })
+                                
+                                category_sources = category_response.get("context", [])
+                                category_ai_response = ""  # 기본값
+                                
+                                print(f"DEBUG: {category} - 검색된 문서 수: {len(category_sources)}")
                                 
                                 if category_sources:
                                     filtered_context = "\n\n".join([doc.page_content for doc in category_sources])
                                     
-                                    if intent == "vass":
-                                        enhanced_prompt = f"""Based ONLY on the following verified data, answer the user's question about additional services.
+                                    if category == "vass":
+                                        print("DEBUG: VASS enhanced_prompt 생성 중")
+                                        if extracted_condition == "없음" or not extracted_condition:
+                                            category_message = f"부가서비스 하나만 추천해줘"
+                                        else:
+                                            category_message = f"{extracted_condition} 조건에 맞는 부가서비스 하나만 추천해줘"
+                                        
+                                        enhanced_prompt = f"""다음 검증된 데이터를 기반으로 부가서비스를 추천하세요.
 
-                                    If no matching services are found, respond with "죄송합니다. 요청하신 부가서비스를 찾을 수 없습니다."
+                    검증된 부가서비스 데이터:
+                    {filtered_context}
 
-                                    List and explain the available additional services including their names, prices, and benefits.
+                    사용자 질문: {category_message}
 
-                                    Verified Additional Services Data:
-                                    {filtered_context}
+                    지시사항:
+                    1. 반드시 한국어로 답변하세요
+                    2. 위 데이터에서 부가서비스 하나를 선택하여 추천하세요
+                    3. 서비스명, 가격, 혜택을 포함하여 설명하세요
+                    4. 영어로 답변하지 마세요
 
-                                    User Question: {message}"""
+                    추천:"""
 
-                                    elif intent == "coupon":
-                                        enhanced_prompt = f"""Based ONLY on the following verified data, answer the user's question about coupons and benefits.
-
-                                    If no matching coupons are found, respond with "죄송합니다. 요청하신 쿠폰을 찾을 수 없습니다."
-
-                                    List available coupons and their benefits including discount amounts and how to use them.
-
-                                    Verified Coupon Data:
-                                    {filtered_context}
-
-                                    User Question: {message}"""
+                                    elif category == "coupon":
+                                        print("DEBUG: COUPON enhanced_prompt 생성 중")
+                                        print(f"DEBUG: Coupon context length: {len(filtered_context)}")
+                                        print(f"DEBUG: Coupon context preview: {filtered_context[:200]}...")
+                                        
+                                        if extracted_condition == "없음" or not extracted_condition:
+                                            category_message = f"쿠폰 하나만 추천해줘"
+                                        else:
+                                            category_message = f"{extracted_condition} 조건에 맞는 쿠폰 하나만 추천해줘"
                                     
-                                    else:  # intent == "plan"
-                                        enhanced_prompt = f"""Based ONLY on the following verified data, answer the user's question.
+                                        enhanced_prompt = f"""다음은 쿠폰 데이터입니다. CSV 형식으로 되어 있으며, 각 줄은 하나의 쿠폰을 나타냅니다.
+                                            
+                    형식: ID,쿠폰명,설명,코드,카테고리,생성일,만료일
 
-                                    CRITICAL RULE: If the user asks about a specific plan name that is NOT exactly found in the data below, you MUST respond with "죄송합니다. 해당 요금제를 현재 데이터에서 찾을 수 없습니다."
+                    쿠폰 데이터:
+                    {filtered_context}
 
-                                    DO NOT:
-                                    - Make up plan names that don't exist in the data
-                                    - Combine information from different plans 
-                                    - Infer or guess pricing/features not explicitly stated
-                                    - Use similar plan names as if they were the requested plan
+                    위 데이터에서 쿠폰 하나를 선택하여 추천하세요:
+                    - 쿠폰명 (예: GS 5천원 할인쿠폰, 스파오 5천원 할인쿠폰, cgv 팝콘+음료)
+                    - 혜택 설명
 
-                                    ONLY provide information about plans that are explicitly mentioned in the verified data below.
+                    한국어로 답변하세요."""
+                                    
+                                    else:  # category == "plan"
+                                        
+                                        print("DEBUG: PLAN enhanced_prompt 생성 중")
+                                        if extracted_condition == "없음" or not extracted_condition:
+                                            category_message = f"요금제 하나만 추천해줘"
+                                        else:
+                                            category_message = f"{extracted_condition} 조건에 맞는 요금제 하나만 추천해줘"
+                                        
+                                        enhanced_prompt = f"""다음은 통신 요금제 데이터입니다. 각 요금제의 정보를 정확히 읽고 추천하세요.
 
-                                    Verified Data:
+                                    예시 데이터 형식:
+                                    - 요금제명: 5G 프리미어 에센셜
+                                    - 가격: 89000
+                                    - 데이터: 200GB
+                                    - 통화: 무제한
+                                    - 문자: 무제한
+                                    - 혜택: 넷플릭스 무료
+
+                                    중요: 데이터가 "무제한"이라고 명시되지 않은 경우, 절대 무제한이라고 말하지 마세요.
+                                    무제한은 -1이 무제한입니다.
+                                    예: "95"는 95GB를 의미하며, 무제한이 아닙니다, "-1"은 데이터 무제한을 의미합니다.
+
+                                    검증된 요금제 데이터:
                                     {filtered_context}
 
-                                    User Question: {message}
+                                    사용자 질문: {category_message}
 
-                                    Remember: Only answer about plans that are EXACTLY named in the verified data above. If the exact plan name is not found, clearly state it's not available."""
+                                    지시사항:
+                                    1. 데이터에 적힌 그대로만 설명하세요
+                                    2. 숫자만 있으면 GB 단위입니다 (예: 95 → 95GB)
+                                    3. "무제한"이라고 명시된 경우만 무제한으로 설명
+                                    4. 가격은 원 단위로 표시 (예: 68000 → 68,000원)
+                                    5. 한국어로 답변하세요
+
+                                    추천:"""
                                     
+                                    # 모든 카테고리에 대해 enhanced_prompt로 응답 생성
                                     filtered_response = self.combine_docs_chain.invoke({
                                         "input": enhanced_prompt,
                                         "chat_history": chat_history_str,
-                                        "context": used_sources,
+                                        "context": category_sources,
                                         "user_id": user_id
                                     })
                                     category_ai_response = str(filtered_response)
-                            
-                            # 결과 저장
-                            category_results[category] = {
-                                'response': category_ai_response,
-                                'sources': category_sources
-                            }
-                    
-                    # 가격 조건 검색도 포함 (기존 로직 활용)
-                    price_conditions = self.extract_price_conditions(message)
-                    if price_conditions.get("has_price_condition") and self.csv_verifier:
-                        print(f"DEBUG: Comprehensive mode with price conditions")
-                        
-                        # 각 카테고리별로 가격 조건 검색
-                        for category in ['plan', 'vass', 'coupon']:
-                            matching_items = self.search_plans_by_price(price_conditions, category)
-                            if matching_items and matching_items[0]:
-                                item = matching_items[0]
-                                
-                                if category == 'plan':
-                                    price_response = f"**{item['name']}**\n"
-                                    price_response += f"- 월 요금: {item['price']:,}원\n"
-                                    price_response += f"- 데이터: {item['data']}\n"
-                                    price_response += f"- 통화: {item['calls']}\n"
-                                    price_response += f"- 문자: {item['sms']}\n"
-                                    price_response += f"- 혜택: {item['benefit']}"
+                                    print(f"DEBUG: {category} AI 응답: {category_ai_response}")
                                 else:
-                                    price_response = f"**{item['name']}**\n"
-                                    price_response += f"- 가격: {item['price']:,}원\n"
-                                    price_response += f"- 혜택: {item['benefit']}"
+                                    # 검색 결과가 없을 때 기본 메시지
+                                    if category == 'plan':
+                                        category_ai_response = "현재 추천 가능한 요금제를 찾을 수 없습니다."
+                                    elif category == 'vass':
+                                        category_ai_response = "현재 추천 가능한 부가서비스를 찾을 수 없습니다."
+                                    else:
+                                        category_ai_response = "현재 추천 가능한 쿠폰을 찾을 수 없습니다."
                                 
-                                # 가격 조건 결과가 있으면 우선 사용
+                                # 결과 저장
                                 category_results[category] = {
-                                    'response': price_response,
-                                    'sources': []
+                                    'response': category_ai_response,
+                                    'sources': category_sources
                                 }
-                    
-                    # 모든 결과 조합하여 최종 응답 생성
-                    ai_response = "각 카테고리별로 추천해드리겠습니다.\n\n"
-                    
-                    # 요금제
-                    ai_response += "## 추천 통신 요금제\n"
-                    if category_results['plan'] and category_results['plan']['response']:
-                        ai_response += category_results['plan']['response'] + "\n\n"
-                    else:
-                        ai_response += "현재 추천 가능한 요금제를 찾을 수 없습니다.\n\n"
-                    
-                    # 부가서비스
-                    ai_response += "## 추천 부가서비스\n"
-                    if category_results['vass'] and category_results['vass']['response']:
-                        ai_response += category_results['vass']['response'] + "\n\n"
-                    else:
-                        ai_response += "현재 추천 가능한 부가서비스를 찾을 수 없습니다.\n\n"
-                    
-                    # 쿠폰
-                    ai_response += "## 추천 쿠폰/혜택\n"
-                    if category_results['coupon'] and category_results['coupon']['response']:
-                        ai_response += category_results['coupon']['response'] + "\n"
-                    else:
-                        ai_response += "현재 추천 가능한 쿠폰을 찾을 수 없습니다.\n"
-                    
-                    # 모든 소스 문서 결합
-                    used_sources = []
-                    for category_data in category_results.values():
-                        if category_data and category_data.get('sources'):
-                            used_sources.extend(category_data['sources'])
-                    
-                    print(f"DEBUG: Comprehensive mode completed - used {len(used_sources)} total sources")
+                        
+                        # 가격 조건 처리
+                        price_conditions = self.extract_price_conditions(message)
+                        if price_conditions.get("has_price_condition") and self.csv_verifier:
+                            print(f"DEBUG: Comprehensive mode with price conditions")
+                            
+                            for category in ['plan', 'vass', 'coupon']:
+                                matching_items = self.search_plans_by_price(price_conditions, category)
+                                if matching_items and matching_items[0]:
+                                    item = matching_items[0]
+                                    
+                                    if category == 'plan':
+                                        price_response = f"**{item['name']}**\n"
+                                        price_response += f"- 월 요금: {item['price']:,}원\n"
+                                        price_response += f"- 데이터: {item['data']}\n"
+                                        price_response += f"- 통화: {item['calls']}\n"
+                                        price_response += f"- 문자: {item['sms']}\n"
+                                        price_response += f"- 혜택: {item['benefit']}"
+                                    else:
+                                        price_response = f"**{item['name']}**\n"
+                                        price_response += f"- 가격: {item['price']:,}원\n"
+                                        price_response += f"- 혜택: {item['benefit']}"
+                                    
+                                    # 가격 조건 결과가 있으면 우선 사용
+                                    category_results[category] = {
+                                        'response': price_response,
+                                        'sources': []
+                                    }
+                        
+                        # 최종 응답 생성
+                        ai_response = "각 카테고리별로 추천해드리겠습니다.\n\n"
+                        
+                        # 요금제
+                        ai_response += "## 추천 통신 요금제\n"
+                        if category_results['plan'] and category_results['plan']['response']:
+                            ai_response += category_results['plan']['response'] + "\n\n"
+                        else:
+                            ai_response += "현재 추천 가능한 요금제를 찾을 수 없습니다.\n\n"
+                        
+                        # 부가서비스
+                        ai_response += "## 추천 부가서비스\n"
+                        if category_results['vass'] and category_results['vass']['response']:
+                            ai_response += category_results['vass']['response'] + "\n\n"
+                        else:
+                            ai_response += "현재 추천 가능한 부가서비스를 찾을 수 없습니다.\n\n"
+                        
+                        # 쿠폰
+                        ai_response += "## 추천 쿠폰/혜택\n"
+                        if category_results['coupon'] and category_results['coupon']['response']:
+                            ai_response += category_results['coupon']['response'] + "\n"
+                        else:
+                            ai_response += "현재 추천 가능한 쿠폰을 찾을 수 없습니다.\n"
+                        
+                        # 모든 소스 문서 결합
+                        used_sources = []
+                        for category_data in category_results.values():
+                            if category_data and category_data.get('sources'):
+                                used_sources.extend(category_data['sources'])
+                        
+                        print(f"DEBUG: Comprehensive mode completed - used {len(used_sources)} total sources")
                  
                  
                 elif search_filter and intent != "comprehensive" and intent != "general":
@@ -1011,7 +1057,34 @@ class RAGManager:
                 'message': f"'{plan_name}' 요금제를 찾을 수 없습니다.",
                 'match_type': verification['match_type']
             }
-    
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.output_parsers import StrOutputParser
+
+    def get_category_condition_chain(self):
+        # 한 번만 생성해서 self에 저장(최적화)
+        if hasattr(self, "_category_condition_chain"):
+            return self._category_condition_chain
+
+        category_prompt = ChatPromptTemplate.from_template("""
+        아래는 사용자의 종합 추천 요청 메시지입니다.
+
+        - 요청: "{user_message}"
+        - 카테고리: {category}  (plan=요금제, vass=부가서비스, coupon=쿠폰/혜택)
+
+        위 요청 중 '{category}'(이)에 해당하는 조건(예: 가격, 특징, 용도 등)만 한국어 한 문장으로 명확히 정리해서 추출하세요.
+        - 만약 '{category}'에 해당하는 조건이 명확히 없으면 '없음'이라고만 답하세요.
+        - 예시: 
+        * 요청: "넷플릭스 가능한 요금제, 영화 쿠폰, 데이터 많이 주는 부가서비스 추천해줘"
+        * 카테고리: plan → "넷플릭스 가능"
+        * 카테고리: vass → "데이터 많이 주는"
+        * 카테고리: coupon → "영화 쿠폰"
+        - 답변은 조건 키워드나 짧은 구로만. 불필요한 말은 포함하지 마세요.
+
+        [조건만]: 
+        """)
+        self._category_condition_chain = category_prompt | self.analysis_llm | StrOutputParser()
+        return self._category_condition_chain
+
     def get_user_statistics(self, user_id: str) -> Dict[str, Any]:
         user_id = str(user_id)
         chat_history, conversation_summary, _ = self.memory_manager.load_user_memory(user_id)
