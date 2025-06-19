@@ -7,6 +7,8 @@ import asyncio
 import signal
 from pathlib import Path
 
+from app.services.consumer import stream_consumer , image_stream_consumer
+
 # 출력 강제 플러시
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
@@ -46,6 +48,7 @@ try:
     force_print("✅ 컨슈머 임포트 성공")
 except Exception as e:
     force_print(f"❌ 컨슈머 임포트 실패: {e}")
+
 
 # 전역 변수
 rag_manager = None
@@ -100,9 +103,13 @@ async def start_consumer():
         
         consumer_task = asyncio.create_task(stream_consumer.start_consuming())
         force_print("✅ 컨슈머 태스크 생성됨")
-        
-        return True
-        
+
+         # Image Streams 컨슈머 시작
+        image_consumer_task = asyncio.create_task(image_stream_consumer.start_consuming())
+        print("Image Streams 컨슈머 시작")
+            
+        yield
+
     except Exception as e:
         force_print(f"❌ 컨슈머 시작 실패: {e}")
         return False
@@ -173,7 +180,9 @@ async def health_check():
         "status": "ok",
         "rag_initialized": rag_manager is not None,
         "consumer_running": stream_consumer.running if stream_consumer else False,
-        "data_dir": getattr(settings, 'PRICING_DATA_DIR', 'unknown')
+        "data_dir": getattr(settings, 'PRICING_DATA_DIR', 'unknown'),
+        "image_consumer_running": image_stream_consumer.running
+
     }
 
 @app.get("/debug")

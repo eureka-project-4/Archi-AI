@@ -30,6 +30,12 @@ class DockerSettings(BaseSettings):
     CONSUMER_GROUP: str = "request-processor"
     CONSUMER_NAME: str = "ai-consumer-1"
 
+
+    IMAGE_REQUEST_STREAM : str = "image-request-stream"
+    IMAGE_CONSUMER_GROUP : str = "image-request-processor" 
+    IMAGE_CONSUMER_NAME : str = "image-consumer-1"
+    IMAGE_RESPONSE_STREAM : str = "image-response-stream"
+
     ENVIRONMENT: str = "docker"
 
     class Config:

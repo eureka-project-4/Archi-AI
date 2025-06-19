@@ -22,5 +22,12 @@ class Settings(BaseSettings):
     # 이 파이썬 소비자의 이름 (Consumer Group 내 개별 소비자 식별용)
     CONSUMER_NAME: str = "ai-consumer-1"
     
+    # === 이미지 메시지 처리 스트림 ===
+    IMAGE_REQUEST_STREAM: str = "image-request-stream"
+    IMAGE_RESPONSE_STREAM: str = "image-response-stream"
+    IMAGE_CONSUMER_GROUP: str = "image-request-processor"
+    IMAGE_CONSUMER_NAME: str = "ai-consumer-1"
+
+    
     class Config:
         env_file = ".env.docker"
