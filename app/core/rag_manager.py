@@ -261,11 +261,11 @@ class RAGManager:
             5. "general": General inquiries (greetings, customer service, policies)
             
             Keyword hints:
-            - plan: plan, data, calls, SMS, monthly fee, 5G, LTE, unlimited, pricing
-            - vass: service, roaming, security, additional, premium, add-on
-            - coupon: coupon, discount, benefit, reward, movie, shopping, lifestyle
-            - comprehensive: comprehensive, all, everything, package, total, complete, together
-            - general: hello, inquiry, customer service, policy, terms, help
+        - plan: 요금제, 플랜, 데이터, 통화, 문자, 월요금, 5G, LTE, 무제한, 가격
+        - vass: 부가서비스, 로밍, 보안, 추가, 프리미엄, 애드온
+        - coupon: 쿠폰, 할인, 혜택, 리워드, 영화, 쇼핑, 라이프스타일
+        - comprehensive: 종합, 전체, 모든, 패키지, 토탈, 완전한, 함께, 조합, 추천
+        - general: 안녕, 문의, 고객센터, 정책, 약관, 도움
             
             User input: {user_input}
             
@@ -672,8 +672,28 @@ class RAGManager:
                 used_sources = response.get("context", [])
                 
                 print(f"DEBUG: 검색된 소스 개수: {len(used_sources)}")
-                
-                if search_filter and intent != "comprehensive" and intent != "general":
+                if intent == 'comprehensive':
+                    ai_response = self.recommend_comprehensive_package(user_id, message)
+                    conversation_entry = {
+                        "timestamp": datetime.now().isoformat(),
+                        "human": message,
+                        "ai": ai_response,
+                        "message_type": MessageType.SUGGESTION,
+                        "query_intent": intent
+                    }
+                    chat_history, conversation_summary, _ = self.memory_manager.load_user_memory(user_id)
+                    chat_history.append(conversation_entry)
+                    self.memory_manager.save_user_memory(user_id, chat_history, conversation_summary)
+                    return {
+                        "response": ai_response,
+                        "user_id": user_id,
+                        "message_type": MessageType.SUGGESTION,
+                        "confidence_score": 1.0,
+                        "verification_status": "정상 처리 - 종합 패키지 추천",
+                        "query_intent": intent,
+                        "comprehensive_package": True
+                    }
+                elif search_filter and intent != "comprehensive" and intent != "general":
                     print(f"DEBUG: 사후 필터링 적용 - 타겟 타입: {search_filter.get('type')}")
                     original_count = len(used_sources)
                     used_sources = [doc for doc in used_sources if doc.metadata.get('type') == search_filter.get('type')]
@@ -705,7 +725,7 @@ class RAGManager:
                         {filtered_context}
 
                         User Question: {message}"""
-
+                        
                         else:  # intent == "plan"
                             enhanced_prompt = f"""Based ONLY on the following verified data, answer the user's question.
 
@@ -770,7 +790,7 @@ class RAGManager:
                     print(f"DEBUG: 최종 신뢰도: {final_confidence_score}")
                     
                     if final_confidence_score < 0.7:
-                        ai_response += f"\n\n⚠️ 일부 정보의 정확성을 확인해주세요. 정확한 요금제 정보는 공식 홈페이지에서 확인 가능합니다."
+                        ai_response += f"\n\n일부 정보의 정확성을 확인해주세요. 정확한 요금제 정보는 공식 홈페이지에서 확인 가능합니다."
             
             # 대화 기록 저장
             conversation_entry = {
@@ -839,7 +859,69 @@ class RAGManager:
                 'message': f"'{plan_name}' 요금제를 찾을 수 없습니다.",
                 'match_type': verification['match_type']
             }
-    
+    def recommend_comprehensive_package(self, user_id: str, user_message: str) -> str:
+        chat_history, conversation_summary, _ = self.memory_manager.load_user_memory(user_id)
+        chat_history_str = self.memory_manager.format_chat_history(chat_history, conversation_summary)
+
+        # PLAN (strict prompt X)
+        plan_retriever = self.get_filtered_retriever("plan")
+        plan_docs = plan_retriever.invoke(user_message)
+        plan_prompt = f"""아래 데이터만 참고해서, 사용자에게 가장 적합한 요금제를 1개만 추천하고 추천 이유도 간단히 설명하세요.
+    반드시 실제 데이터에 존재하는 요금제만 추천하세요.
+
+    User Question: {user_message}
+    """
+        plan_result = self.combine_docs_chain.invoke({
+            "input": plan_prompt,
+            "chat_history": chat_history_str,
+            "context": plan_docs,
+            "user_id": user_id
+        })
+        plan_text = str(plan_result).strip()
+
+        # VASS (strict prompt X)
+        vass_retriever = self.get_filtered_retriever("vass")
+        vass_docs = vass_retriever.invoke(user_message)
+        vass_prompt = f"""아래 데이터만 참고해서, 사용자에게 가장 적합한 부가서비스를 1개만 추천하고 추천 이유도 간단히 설명하세요.
+    반드시 실제 데이터에 존재하는 부가서비스만 추천하세요.
+
+    User Question: {user_message}
+    """
+        vass_result = self.combine_docs_chain.invoke({
+            "input": vass_prompt,
+            "chat_history": chat_history_str,
+            "context": vass_docs,
+            "user_id": user_id
+        })
+        vass_text = str(vass_result).strip()
+
+        # COUPON (strict prompt X)
+        coupon_retriever = self.get_filtered_retriever("coupon")
+        coupon_docs = coupon_retriever.invoke(user_message)
+        coupon_prompt = f"""아래 데이터만 참고해서, 사용자에게 가장 적합한 쿠폰 또는 혜택을 1개만 추천하고 추천 이유도 간단히 설명하세요.
+    반드시 실제 데이터에 존재하는 쿠폰/혜택만 추천하세요.
+
+    User Question: {user_message}
+    """
+        coupon_result = self.combine_docs_chain.invoke({
+            "input": coupon_prompt,
+            "chat_history": chat_history_str,
+            "context": coupon_docs,
+            "user_id": user_id
+        })
+        coupon_text = str(coupon_result).strip()
+
+        final_response = (
+            "고객님께 맞는 종합 패키지를 안내해드릴게요.\n\n"
+            "📱 [요금제 추천]\n" + plan_text + "\n\n"
+            "🛡️ [부가서비스 추천]\n" + vass_text + "\n\n"
+            "🎟️ [쿠폰/혜택 추천]\n" + coupon_text + "\n\n"
+            "위 세 가지를 조합해 통신, 부가서비스, 라이프스타일까지 모두 챙길 수 있습니다!"
+        )
+        return final_response
+
+
+
     def search_plans_by_criteria(self, criteria: Dict[str, Any]) -> List[Dict[str, Any]]:
         if not self.csv_verifier:
             return []
