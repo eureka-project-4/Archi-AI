@@ -48,7 +48,11 @@ try:
     force_print("✅ 컨슈머 임포트 성공")
 except Exception as e:
     force_print(f"❌ 컨슈머 임포트 실패: {e}")
-
+try:
+    from app.services.consumer import image_stream_consumer
+    force_print("✅ 컨슈머 임포트 성공")
+except Exception as e:
+    force_print(f"❌ 컨슈머 임포트 실패: {e}")
 
 # 전역 변수
 rag_manager = None
@@ -100,7 +104,7 @@ async def start_consumer():
         else:
             force_print("❌ Redis 연결 실패")
             return False
-        if await image_consumer_task.connect_redis():
+        if await image_stream_consumer.connect_redis():
             force_print("✅ Redis 연결 성공")
         else:
             force_print("❌ Redis 연결 실패")
@@ -109,9 +113,8 @@ async def start_consumer():
         image_consumer_task = asyncio.create_task(image_stream_consumer.start_consuming())
         force_print("✅ 컨슈머 태스크 생성됨")
 
-         # Image Streams 컨슈머 시작
-        image_consumer_task = asyncio.create_task(image_stream_consumer.start_consuming())
-        print("Image Streams 컨슈머 시작")
+        
+        print("컨슈머 시작")
             
         yield
 
@@ -153,7 +156,8 @@ async def shutdown_event():
     try:
         if stream_consumer:
             stream_consumer.stop()
-        
+        if image_stream_consumer:
+            image_stream_consumer.stop()
         if consumer_task and not consumer_task.done():
             consumer_task.cancel()
             try:
@@ -176,6 +180,7 @@ async def root():
         "message": "AI 처리 서버가 실행 중입니다",
         "rag_system": "OK" if rag_manager else "ERROR",
         "consumer": "OK" if stream_consumer and stream_consumer.running else "UNKNOWN",
+        "image_consumer": "OK" if image_stream_consumer and image_stream_consumer.running else "UNKNOWN",
         "initialization": "success" if init_success else "failed"
     }
 
@@ -186,7 +191,7 @@ async def health_check():
         "rag_initialized": rag_manager is not None,
         "consumer_running": stream_consumer.running if stream_consumer else False,
         "data_dir": getattr(settings, 'PRICING_DATA_DIR', 'unknown'),
-        "image_consumer_running": image_stream_consumer.running
+        "image_consumer_running": image_stream_consumer.running if image_stream_consumer else False
 
     }
 
