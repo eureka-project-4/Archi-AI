@@ -6,6 +6,8 @@ import os
 import asyncio
 import signal
 from pathlib import Path
+from prometheus_fastapi_instrumentator import Instrumentator
+
 
 from app.services.consumer import stream_consumer , image_stream_consumer
 
@@ -128,6 +130,9 @@ app = FastAPI(
     description="채팅 메시지 AI 처리 및 응답 생성", 
     version="1.0.0"
 )
+
+#metric open
+Instrumentator().instrument(app).expose(app) # http://localhost:8082/metrics
 
 force_print("📱 FastAPI 앱 생성됨")
 
