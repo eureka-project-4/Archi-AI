@@ -27,7 +27,6 @@ class MessageClassifier:
         분류 기준:
         - SUGGESTION: 사용자 성향/프로필 기반 맞춤형 추천...
         - PREFERENCE_UPDATE: 사용자 선호도 변경 관련...
-        - PROACTIVE_SUGGESTION: 시스템 주도적 추천...
         - GENERAL_RESPONSE: 일반 대화, 인사, 단순 정보 제공, 질문 답변
         - USER_MESSAGE: 사용자가 보낸 원본 메시지 (분류 불필요)
         - FILTERED_MESSAGE: 부적절한 내용 감지됨 (욕설, 비속어 등)
@@ -73,7 +72,6 @@ class MessageClassifier:
             type_mapping = {
                 "SUGGESTION": MessageType.SUGGESTION,
                 "PREFERENCE_UPDATE": MessageType.PREFERENCE_UPDATE,
-                "PROACTIVE_SUGGESTION": MessageType.PROACTIVE_SUGGESTION,
                 "GENERAL_RESPONSE": MessageType.GENERAL_RESPONSE,
                 "USER_MESSAGE": MessageType.USER_MESSAGE,
                 "FILTERED_MESSAGE": MessageType.FILTERED_MESSAGE,

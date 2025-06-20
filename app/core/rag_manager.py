@@ -742,7 +742,7 @@ class RAGManager:
                     지시사항:
                     1. 반드시 한국어로 답변하세요
                     2. 위 데이터에서 부가서비스 하나를 선택하여 추천하세요
-                    3. 서비스명, 가격, 혜택을 포함하여 설명하세요
+                    3. 서비스명, 가격, 혜택을 포함하여 20자 이내로 설명하세요
                     4. 영어로 답변하지 마세요
 
                     추천:"""
@@ -764,11 +764,11 @@ class RAGManager:
                     쿠폰 데이터:
                     {filtered_context}
 
-                    위 데이터에서 쿠폰 하나를 선택하여 추천하세요:
-                    - 쿠폰명 (예: GS 5천원 할인쿠폰, 스파오 5천원 할인쿠폰, cgv 팝콘+음료)
-                    - 혜택 설명
-
-                    한국어로 답변하세요."""
+                    지시사항:
+                    1. 반드시 한국어로 답변하세요
+                    2. 위 데이터에서 쿠폰 하나를 선택하여 추천하세요
+                    3. 쿠폰명, 가격, 혜택을 포함하여 20자 이내로 설명하세요
+                    4. 영어로 답변하지 마세요"""
                                     
                                     else:  # category == "plan"
                                         
@@ -802,7 +802,9 @@ class RAGManager:
                                     2. 숫자만 있으면 GB 단위입니다 (예: 95 → 95GB)
                                     3. "무제한"이라고 명시된 경우만 무제한으로 설명
                                     4. 가격은 원 단위로 표시 (예: 68000 → 68,000원)
-                                    5. 한국어로 답변하세요
+                                    5. 혜택에 대한 부분은 설명하지 마세요.
+                                    6. 설명 이유는 20자 이내로 설명하세요
+                                    7. 한국어로 답변하세요
 
                                     추천:"""
                                     
@@ -859,24 +861,24 @@ class RAGManager:
                                     }
                         
                         # 최종 응답 생성
-                        ai_response = "각 카테고리별로 추천해드리겠습니다.\n\n"
+                        ai_response = ""
                         
                         # 요금제
-                        ai_response += "## 추천 통신 요금제\n"
+                        ai_response += "##추천 통신 요금제\n"
                         if category_results['plan'] and category_results['plan']['response']:
                             ai_response += category_results['plan']['response'] + "\n\n"
                         else:
                             ai_response += "현재 추천 가능한 요금제를 찾을 수 없습니다.\n\n"
                         
                         # 부가서비스
-                        ai_response += "## 추천 부가서비스\n"
+                        ai_response += "##추천 부가서비스\n"
                         if category_results['vass'] and category_results['vass']['response']:
                             ai_response += category_results['vass']['response'] + "\n\n"
                         else:
-                            ai_response += "현재 추천 가능한 부가서비스를 찾을 수 없습니다.\n\n"
+                            ai_response += "##현재 추천 가능한 부가서비스를 찾을 수 없습니다.\n\n"
                         
                         # 쿠폰
-                        ai_response += "## 추천 쿠폰/혜택\n"
+                        ai_response += "##추천 쿠폰/혜택\n"
                         if category_results['coupon'] and category_results['coupon']['response']:
                             ai_response += category_results['coupon']['response'] + "\n"
                         else:
