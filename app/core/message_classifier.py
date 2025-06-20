@@ -17,7 +17,7 @@ class MessageClassifier:
 
         사용자 입력: {human_input}
         AI 응답: {ai_response}
-
+        **critical point: don't include benefit (ex : name:5G 프리미어 에센셜, benefit:u+ tv 구독권 증정 -> result : 5G 프리미어 에센셜)**
         **중요: mentioned_items는 AI가 실제로 추천한 모든 상품/서비스를 포함하세요.**
         - 통신 요금제 (예: 5G 프리미어, LTE 베이직 등)
         - 부가서비스 (예: 로밍 서비스, 하버드 비즈니스 리뷰 구독 등)

@@ -374,13 +374,13 @@ class RAGManager:
             
             ONLY extract:
             - Specific product names or service names (noun form only)
-            - Examples: "5G 프리미어 에센셜", "T플랜 스페셜", "LTE 베이직"
+            - Examples: "5G 프리미어 에센셜", "T플랜 스페셜", "LTE 베이직", "지니뮤직 마음껏듣기 월정액" , "배스킨라빈스 파인트 4천원 할인쿠폰"
             
             User input: {user_input}
             
             Respond in JSON format only:
             {{
-                "extracted_plans": ["list of specific plan names"],
+                "extracted_names": ["list of specific product names"],
                 "confidence": 0.0-1.0
             }}
             """)
@@ -394,7 +394,7 @@ class RAGManager:
                     result = json_match.group(1)
             
             extracted_data = json.loads(result)
-            return extracted_data.get("extracted_plans", [])
+            return extracted_data.get("extracted_names", [])
             
         except Exception as e:
             print(f"요금제명 추출 실패: {e}")
@@ -593,16 +593,16 @@ class RAGManager:
                         print(f"DEBUG: 요금제 '{plan_name}' 정확히 매칭됨 - CSV 직접 사용")
                         plan_info = verification['matched_plan']
                         ai_response = f"""
-{plan_name} 요금제 정보를 안내해드리겠습니다.
+                            {plan_name} 요금제 정보를 안내해드리겠습니다.
 
-**{plan_name}**
-- 월 요금: {plan_info['price']:,}원
-- 데이터: {plan_info['data']}
-- 통화: {plan_info['calls']}
-- 문자: {plan_info['sms']}
-- 혜택: {plan_info['benefit']}
+                            **{plan_name}**
+                            - 월 요금: {plan_info['price']:,}원
+                            - 데이터: {plan_info['data']}
+                            - 통화: {plan_info['calls']}
+                            - 문자: {plan_info['sms']}
+                            - 혜택: {plan_info['benefit']}
 
-이 요금제에 대해 더 궁금한 점이 있으시면 언제든지 문의해주세요.
+                            이 요금제에 대해 더 궁금한 점이 있으시면 언제든지 문의해주세요.
                         """
                         
                         conversation_entry = {
