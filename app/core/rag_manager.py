@@ -759,16 +759,19 @@ class RAGManager:
                                     
                                         enhanced_prompt = f"""다음은 쿠폰 데이터입니다. CSV 형식으로 되어 있으며, 각 줄은 하나의 쿠폰을 나타냅니다.
                                             
-                    형식: ID,쿠폰명,설명,코드,카테고리,생성일,만료일
+                                            형식: ID,쿠폰명,설명,코드,카테고리,생성일,만료일
 
-                    쿠폰 데이터:
-                    {filtered_context}
+                                            쿠폰 데이터:
+                                            {filtered_context}
 
-                    지시사항:
-                    1. 반드시 한국어로 답변하세요
-                    2. 위 데이터에서 쿠폰 하나를 선택하여 추천하세요
-                    3. 쿠폰명, 가격, 혜택을 포함하여 20자 이내로 설명하세요
-                    4. 영어로 답변하지 마세요"""
+                                            지시사항:
+                                            1. 반드시 한국어로 답변하세요
+                                            2. 위 데이터에서 쿠폰 하나를 선택하여 추천하세요
+                                            3. 쿠폰명, 가격, 혜택을 포함하여 20자 이내로 설명하세요
+                                            4. 영어로 답변하지 마세요
+                                            사용자 질문: {category_message}
+
+                                            """
                                     
                                     else:  # category == "plan"
                                         
@@ -903,48 +906,68 @@ class RAGManager:
                         filtered_context = "\n\n".join([doc.page_content for doc in used_sources])
                         
                         if intent == "vass":
-                            enhanced_prompt = f"""Based ONLY on the following verified data, answer the user's question about additional services.
+                            enhanced_prompt = f"""다음 검증된 데이터를 기반으로 부가서비스를 추천하세요.
 
-                        If no matching services are found, respond with "죄송합니다. 요청하신 부가서비스를 찾을 수 없습니다."
+                                검증된 부가서비스 데이터:
+                                {filtered_context}
 
-                        List and explain the available additional services including their names, prices, and benefits.
+                                사용자 질문: {message}
 
-                        Verified Additional Services Data:
-                        {filtered_context}
+                                지시사항:
+                                1. 반드시 한국어로 답변하세요
+                                2. 위 데이터에서 부가서비스 하나를 선택하여 추천하세요
+                                3. 서비스명, 가격, 혜택을 포함하여 20자 이내로 설명하세요
+                                4. 영어로 답변하지 마세요
 
-                        User Question: {message}"""
+                                추천:"""
 
                         elif intent == "coupon":
-                            enhanced_prompt = f"""Based ONLY on the following verified data, answer the user's question about coupons and benefits.
+                            enhanced_prompt = f"""다음은 쿠폰 데이터입니다. CSV 형식으로 되어 있으며, 각 줄은 하나의 쿠폰을 나타냅니다.
+                                            
+                                            형식: ID,쿠폰명,설명,코드,카테고리,생성일,만료일
 
-                        If no matching coupons are found, respond with "죄송합니다. 요청하신 쿠폰을 찾을 수 없습니다."
+                                            쿠폰 데이터:
+                                            {filtered_context}
 
-                        List available coupons and their benefits including discount amounts and how to use them.
+                                            지시사항:
+                                            1. 반드시 한국어로 답변하세요
+                                            2. 위 데이터에서 쿠폰 하나를 선택하여 추천하세요
+                                            3. 쿠폰명, 가격, 혜택을 포함하여 20자 이내로 설명하세요
+                                            4. 영어로 답변하지 마세요
+                                            사용자 질문: {message}
 
-                        Verified Coupon Data:
-                        {filtered_context}
-
-                        User Question: {message}"""
+                                            """
                         
                         else:  # intent == "plan"
-                            enhanced_prompt = f"""Based ONLY on the following verified data, answer the user's question.
+                            enhanced_prompt = f"""다음은 통신 요금제 데이터입니다. 각 요금제의 정보를 정확히 읽고 추천하세요.
 
-                        CRITICAL RULE: If the user asks about a specific plan name that is NOT exactly found in the data below, you MUST respond with "죄송합니다. 해당 요금제를 현재 데이터에서 찾을 수 없습니다."
+                                    예시 데이터 형식:
+                                    - 요금제명: 5G 프리미어 에센셜
+                                    - 가격: 89000
+                                    - 데이터: 200GB
+                                    - 통화: 무제한
+                                    - 문자: 무제한
+                                    - 혜택: 넷플릭스 무료
 
-                        DO NOT:
-                        - Make up plan names that don't exist in the data
-                        - Combine information from different plans 
-                        - Infer or guess pricing/features not explicitly stated
-                        - Use similar plan names as if they were the requested plan
+                                    중요: 데이터가 "무제한"이라고 명시되지 않은 경우, 절대 무제한이라고 말하지 마세요.
+                                    무제한은 -1이 무제한입니다.
+                                    예: "95"는 95GB를 의미하며, 무제한이 아닙니다, "-1"은 데이터 무제한을 의미합니다.
 
-                        ONLY provide information about plans that are explicitly mentioned in the verified data below.
+                                    검증된 요금제 데이터:
+                                    {filtered_context}
 
-                        Verified Data:
-                        {filtered_context}
+                                    사용자 질문: {message}
 
-                        User Question: {message}
+                                    지시사항:
+                                    1. 데이터에 적힌 그대로만 설명하세요
+                                    2. 숫자만 있으면 GB 단위입니다 (예: 95 → 95GB)
+                                    3. "무제한"이라고 명시된 경우만 무제한으로 설명
+                                    4. 가격은 원 단위로 표시 (예: 68000 → 68,000원)
+                                    5. 혜택에 대한 부분은 설명하지 마세요.
+                                    6. 설명 이유는 20자 이내로 설명하세요
+                                    7. 한국어로 답변하세요
 
-                        Remember: Only answer about plans that are EXACTLY named in the verified data above. If the exact plan name is not found, clearly state it's not available."""
+                                    추천:"""
                         
                         filtered_response = self.combine_docs_chain.invoke({
                             "input": enhanced_prompt,
