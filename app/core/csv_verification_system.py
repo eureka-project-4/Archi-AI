@@ -255,30 +255,59 @@ class CSVVerificationSystem:
         return None
     
     def find_plans_by_criteria(self, price_range: tuple = None, data_min: int = None, 
-                              age_code: str = None) -> List[Dict]:
+                          age_code: str = None, category_code: str = None) -> List[Dict]:
         results = []
         
         unique_plans = {}
         for plan_info in self.plan_database.values():
             unique_plans[plan_info['name']] = plan_info
         
+
+        
+        filtered_counts = {
+            'price': 0,
+            'data': 0,
+            'age': 0,
+            'category': 0
+        }
+        
         for plan_info in unique_plans.values():
+            # 각 필터 단계별로 체크
             if price_range:
                 if not (price_range[0] <= plan_info['price'] <= price_range[1]):
+                    filtered_counts['price'] += 1
                     continue
             
             if data_min and plan_info['data'] != '무제한':
                 try:
                     data_gb = int(plan_info['data'].replace('GB', ''))
                     if data_gb < data_min:
+                        filtered_counts['data'] += 1
                         continue
                 except:
                     continue
             
             if age_code and plan_info['age_code'] != age_code:
+                filtered_counts['age'] += 1
                 continue
-            
+                
+            if category_code and plan_info.get('category_code') != category_code:
+                filtered_counts['category'] += 1
+                print(f"DEBUG: 카테고리 필터 - {plan_info['name']}: {plan_info.get('category_code')} != {category_code}")
+                continue
+                
             results.append(plan_info)
+        
+
+        
+        # 결과가 0개면 샘플 데이터 확인
+        if len(results) == 0 and category_code:
+
+            category_distribution = {}
+            for plan_info in unique_plans.values():
+                cc = plan_info.get('category_code', 'None')
+                category_distribution[cc] = category_distribution.get(cc, 0) + 1
+
         
         return results
     

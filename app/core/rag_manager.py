@@ -248,7 +248,18 @@ class RAGManager:
             3. "coupon": Coupons/benefits only (movie discounts, shopping, lifestyle benefits)
             4. "comprehensive": Comprehensive recommendations (plans + services + coupons together)
             5. "general": General inquiries (greetings, customer service, policies)
-            
+            Important rules:
+            - Questions about PREVIOUS recommendations or asking for EXPLANATIONS about past responses should be classified as "general"
+            - Only classify as "comprehensive" when user is ASKING FOR NEW recommendations that combine multiple categories
+            - Keywords like "방금", "아까", "네가 말한", "이유", "왜" usually indicate "general" intent
+            Examples:
+            - "드라마 보면서 커피 마시는 걸 좋아해" → general (daily life)
+            - "5G 요금제 추천해줘" → plan (telecom product)
+            - "방금 추천한 이유가 뭐야?" → general (asking for explanation)
+            - "요금제랑 쿠폰 다 추천해줘" → comprehensive (multiple telecom products)
+            data_category:
+            - "5G": 5G related plans or services
+            - "LTE": LTE related plans or services
             Keyword hints:
         - plan: 요금제, 플랜, 데이터, 통화, 문자, 월요금, 5G, LTE, 무제한, 가격
         - vass: 부가서비스, 로밍, 보안, 추가, 프리미엄, 애드온
@@ -262,7 +273,8 @@ class RAGManager:
             {{
                 "intent": "plan|vass|coupon|comprehensive|general",
                 "confidence": 0.0-1.0,
-                "reasoning": "brief explanation of classification decision"
+                "reasoning": "brief explanation of classification decision",
+                "data_category": 5G|LTE|None
             }}
             """)
             
@@ -280,6 +292,7 @@ class RAGManager:
                 "intent": intent_data.get("intent", "general"),
                 "confidence": intent_data.get("confidence", 0.5),
                 "reasoning": intent_data.get("reasoning", ""),
+                "data_category": intent_data.get("data_category", "5G"),
                 "method": "llm_analysis"
             }
             
@@ -330,7 +343,7 @@ class RAGManager:
             print(f"가격 조건 추출 실패: {e}")
             return {"has_price_condition": False}
     
-    def search_plans_by_price(self, price_condition: Dict[str, Any], data_type: str = None) -> List[Dict[str, Any]]:
+    def search_plans_by_price(self, price_condition: Dict[str, Any], data_type: str = None, data_category: str = "5G") -> List[Dict[str, Any]]:
         if not self.csv_verifier or not price_condition.get("has_price_condition"):
             return []
         
@@ -345,9 +358,16 @@ class RAGManager:
         elif price_condition.get("price_around"):
             around_price = price_condition["price_around"]
             criteria["price_range"] = (around_price - 10000, around_price + 10000)
-        
+        if data_category and data_type == "plan":
+            if data_category.upper() == "5G":
+                criteria["category_code"] = 1
+            elif data_category.upper() == "LTE":
+                criteria["category_code"] = 2
         all_results = self.csv_verifier.find_plans_by_criteria(**criteria)
-        
+        if price_condition.get("condition_type") == "expensive":
+            all_results.sort(key=lambda x: x['price'], reverse=True) 
+        elif price_condition.get("condition_type") == "cheap":
+            all_results.sort(key=lambda x: x['price'])
         if data_type is None:
             print(f"DEBUG: 전체 {len(all_results)}개 상품 반환 (모든 타입)")
             return all_results
@@ -467,6 +487,7 @@ class RAGManager:
             user_id = str(user_id)
             intent_analysis = self.analyze_query_intent(message)
             intent = intent_analysis["intent"]
+            data_category = intent_analysis.get("data_category")
             
             print(f"DEBUG: 질문: {message}")
             print(f"DEBUG: 분석된 의도: {intent} (신뢰도: {intent_analysis['confidence']})")
@@ -507,9 +528,9 @@ class RAGManager:
                 print(f"DEBUG: 검색 대상: {search_description} (타입: {data_type_filter})")
                 
                 if data_type_filter:
-                    matching_plans = self.search_plans_by_price(price_conditions, data_type_filter)
+                    matching_plans = self.search_plans_by_price(price_conditions, data_type_filter, data_category)
                 else:
-                    matching_plans = self.search_plans_by_price(price_conditions, None)
+                    matching_plans = self.search_plans_by_price(price_conditions, None, data_category)
                 
                 if matching_plans:
                     print(f"DEBUG: 조건에 맞는 {search_description} {len(matching_plans)}개 발견")
@@ -630,7 +651,48 @@ class RAGManager:
                         print(f"DEBUG: 요금제 '{plan_name}' 통과됨 (신뢰도 {verification['confidence']})")
             else:
                 print(f"DEBUG: 추출된 요금제명이 없거나 CSV 검증 시스템이 없음")
-            
+            # general intent는 RAG 검색 없이 바로 응답
+            if intent == "general":
+                print(f"DEBUG: General intent - RAG 검색 건너뜀")
+                
+                # 이전 대화 기록은 포함시켜야 함!
+                general_prompt = ChatPromptTemplate.from_template("""
+                당신은 친근한 대화 상대입니다. 사용자와 자연스럽게 대화하세요.
+                이전 대화 내용을 기억하고 참고하여 응답하세요.
+                
+                이전 대화:
+                {chat_history}
+                
+                사용자: {message}
+                응답:
+                """)
+                
+                general_chain = general_prompt | self.llm | StrOutputParser()
+                ai_response = general_chain.invoke({
+                    "message": message,
+                    "chat_history": chat_history_str  # 이전 대화 포함!
+                })
+                
+                # 대화 기록 저장
+                conversation_entry = {
+                    "timestamp": datetime.now().isoformat(),
+                    "human": message,
+                    "ai": ai_response,
+                    "message_type": "GENERAL_RESPONSE",
+                    "query_intent": intent
+                }
+                
+                chat_history.append(conversation_entry)
+                self.memory_manager.save_user_memory(user_id, chat_history, conversation_summary)
+                
+                return {
+                    "response": ai_response,
+                    "user_id": user_id,
+                    "message_type": "GENERAL_RESPONSE",
+                    "confidence_score": 1.0,
+                    "verification_status": "정상 처리",
+                    "query_intent": intent
+                }
             # RAG 체인으로 일반 응답 생성
             if self.rag_chain is None:
                 return {
@@ -841,7 +903,7 @@ class RAGManager:
                             print(f"DEBUG: Comprehensive mode with price conditions")
                             
                             for category in ['plan', 'vass', 'coupon']:
-                                matching_items = self.search_plans_by_price(price_conditions, category)
+                                matching_items = self.search_plans_by_price(price_conditions, category, data_category)
                                 if matching_items and matching_items[0]:
                                     item = matching_items[0]
                                     
@@ -948,10 +1010,13 @@ class RAGManager:
                                     - 통화: 무제한
                                     - 문자: 무제한
                                     - 혜택: 넷플릭스 무료
+                                    - 카테고리 코드: 001 or 002
 
                                     중요: 데이터가 "무제한"이라고 명시되지 않은 경우, 절대 무제한이라고 말하지 마세요.
                                     무제한은 -1이 무제한입니다.
                                     예: "95"는 95GB를 의미하며, 무제한이 아닙니다, "-1"은 데이터 무제한을 의미합니다.
+                                    카테고리 코드 001은 5G, 002는 LTE입니다. 절대 001, 002라고 말하지 마세요.
+                                    예 카테고리 코드 001 -> 5G, 002 -> LTE
 
                                     검증된 요금제 데이터:
                                     {filtered_context}
@@ -962,10 +1027,12 @@ class RAGManager:
                                     1. 데이터에 적힌 그대로만 설명하세요
                                     2. 숫자만 있으면 GB 단위입니다 (예: 95 → 95GB)
                                     3. "무제한"이라고 명시된 경우만 무제한으로 설명
-                                    4. 가격은 원 단위로 표시 (예: 68000 → 68,000원)
-                                    5. 혜택에 대한 부분은 설명하지 마세요.
-                                    6. 설명 이유는 20자 이내로 설명하세요
-                                    7. 한국어로 답변하세요
+                                    4. 5G 요금제를 물어봤다면 카테코리 코드 001에서만 대답하세요.
+                                    5. 가격 조건이 있다면 반드시 가격 조건에 맞는 요금제만 추천하세요.
+                                    6. 가격은 원 단위로 표시 (예: 68000 → 68,000원)
+                                    7. 혜택에 대한 부분은 설명하지 마세요.
+                                    8. 설명 이유는 20자 이내로 설명하세요
+                                    9. 한국어로 답변하세요
 
                                     추천:"""
                         
@@ -995,7 +1062,9 @@ class RAGManager:
             # 메시지 분류
             classification = self.message_classifier.classify_message(message, ai_response)
             message_type = classification["message_type"]
-            
+            if classification.get("mentioned_plans"):
+                message_type = MessageType.SUGGESTION
+                classification["message_type"] = MessageType.SUGGESTION
             # 신뢰도 계산
             final_confidence_score = 1.0
             if message_type == "SUGGESTION" and self.csv_verifier:
