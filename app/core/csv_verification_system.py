@@ -100,7 +100,7 @@ class CSVVerificationSystem:
                     'data': '',
                     'calls': '',
                     'sms': '',
-                    'benefit': str(row.get('description', row.get('benefit', ''))),
+                    'benefit': str(row.get('vas_description', row.get('benefit', ''))),
                     'age_code': '',
                     'category_code': '',
                     'type': data_type,
