@@ -94,6 +94,21 @@ FEW_SHOT = [
                         }
                         """
             },
+
+                        {
+                "role": "user",
+                "content": "이미지: 카카오 페이지 사용 비중이 각각 높음. 조건 동일."
+            },
+            {
+                "role": "assistant",
+                "content": """
+                        {
+                        "summary": "카카오 페이지를 주로 사용하는 사용자입니다.",
+                        "tags": ["webtoon" ]
+                        }
+                        """
+            },
+
                         {
                 "role": "user",
                 "content": "이미지: eBook 리더 사용 비중이 각각 높음. 조건 동일."
