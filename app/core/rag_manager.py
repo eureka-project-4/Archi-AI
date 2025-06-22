@@ -613,17 +613,32 @@ class RAGManager:
                     elif verification['exists'] and verification['confidence'] >= 0.8:
                         print(f"DEBUG: 요금제 '{plan_name}' 정확히 매칭됨 - CSV 직접 사용")
                         plan_info = verification['matched_plan']
-                        ai_response = f"""
-                            {plan_name} 요금제 정보를 안내해드리겠습니다.
+                        # ai_response = f"""
+                        #     {plan_name} 상품에 대해 안내해드리겠습니다.
 
-                            **{plan_name}**
-                            - 월 요금: {plan_info['price']:,}원
-                            - 데이터: {plan_info['data']}
-                            - 통화: {plan_info['calls']}
-                            - 문자: {plan_info['sms']}
-                            - 혜택: {plan_info['benefit']}
+                        #     **{plan_name}**
+                        #     - 월 요금: {plan_info['price']:,}원
+                        #     - 데이터: {plan_info['data']}
+                        #     - 통화: {plan_info['calls']}
+                        #     - 문자: {plan_info['sms']}
+                        #     - 혜택: {plan_info['benefit']}
 
-                            이 요금제에 대해 더 궁금한 점이 있으시면 언제든지 문의해주세요.
+                        #     이 상품에 대해 더 궁금한 점이 있으시면 언제든지 문의해주세요.
+                        # """
+                        if len(plan_info['benefit']) > 3:
+                            
+                            ai_response = f"""
+                                {plan_name} 상품에 대해 안내해드리겠습니다.
+
+                                - 혜택: {plan_info['benefit']}
+
+                                이 상품에 대해 더 궁금한 점이 있으시면 언제든지 문의해주세요.
+                            """
+                        else:
+                            ai_response = f"""
+                            {plan_name} 상품에 대해 안내해드리겠습니다.
+                            
+                            이 상품에 대해 더 궁금한 점이 있으시면 언제든지 문의해주세요.
                         """
                         
                         conversation_entry = {
