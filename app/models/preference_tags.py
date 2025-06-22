@@ -66,6 +66,47 @@ FEW_SHOT = [
                         }
                         """
             },
+
+                        {
+                "role": "user",
+                "content": "이미지: YouTube와 웹툰 사용 비중이 각각 높음. 조건 동일."
+            },
+            {
+                "role": "assistant",
+                "content": """
+                        {
+                        "summary": "YouTube와 네이버 웹툰을 주로 사용하는 영상·소셜 중심형 사용자입니다.",
+                        "tags": ["youtube"]
+                        }
+                        """
+            },
+
+            {
+                "role": "user",
+                "content": "이미지: 웹툰 사용 비중이 각각 높음. 조건 동일."
+            },
+            {
+                "role": "assistant",
+                "content": """
+                        {
+                        "summary": "네이버 웹툰을 주로 사용하는 사용자입니다.",
+                        "tags": ["webtoon" ]
+                        }
+                        """
+            },
+                        {
+                "role": "user",
+                "content": "이미지: eBook 리더 사용 비중이 각각 높음. 조건 동일."
+            },
+            {
+                "role": "assistant",
+                "content": """
+                        {
+                        "summary": "eBook 리더를 주로 사용하는 사용자입니다.",
+                        "tags": ["ebook" ]
+                        }
+                        """
+            },
             {
                 "role": "user",
                 "content": "이미지: Instagram 사용 비중이 가장 높고 금융, 카카오톡, 네이버 사용도 있음. 조건 동일."
