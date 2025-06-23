@@ -674,6 +674,8 @@ class RAGManager:
                 general_prompt = ChatPromptTemplate.from_template("""
                 당신은 친근한 대화 상대입니다. 사용자와 자연스럽게 대화하세요.
                 이전 대화 내용을 기억하고 참고하여 응답하세요.
+                ## 지시사항:
+                1. 사용자가 코드를 질문한다던가 일상적이지 않은 질문을 하면 답변하지 마세요.
                 
                 이전 대화:
                 {chat_history}
