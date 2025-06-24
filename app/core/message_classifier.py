@@ -17,22 +17,28 @@ class MessageClassifier:
 
         사용자 입력: {human_input}
         AI 응답: {ai_response}
-        **중요: mentioned_plans는 AI가 실제로 추천한 요금제만 포함하세요.**
-        - "추천드립니다", "권해드립니다"와 함께 언급된 요금제만 포함
-        - 단순히 비교용으로 언급된 요금제는 제외
-        - "대신에", "또는" 같은 대안으로 언급된 것도 제외
+        **critical point: don't include benefit (ex : name:5G 프리미어 에센셜, benefit:u+ tv 구독권 증정 -> result : 5G 프리미어 에센셜)**
+        **중요: mentioned_items는 AI가 실제로 추천한 모든 상품/서비스를 포함하세요.**
+        - 통신 요금제 (예: 5G 프리미어, LTE 베이직 등)
+        - 부가서비스 (예: 로밍 서비스, 하버드 비즈니스 리뷰 구독 등)
+        - 쿠폰/혜택 (예: 영화 할인 쿠폰, 쇼핑 쿠폰 등)
+        - "추천드립니다", "권해드립니다"와 함께 언급된 항목들 포함
+
         분류 기준:
-        - SUGGESTION: 사용자 성향/프로필 기반 맞춤형 추천. "조건에 맞는", "고객님께 추천", "프로필 기반" 등
-        - PREFERENCE_UPDATE: 사용자 선호도 변경 관련. "이제는 ~를 선호", "~로 바꾸고 싶어", "요즘은" 등
-        - PROACTIVE_SUGGESTION: 시스템 주도적 추천. "이번 달 추천", "새로운 요금제 출시", "정기 추천" 등
+        - SUGGESTION: 사용자 성향/프로필 기반 맞춤형 추천...
+        - PREFERENCE_UPDATE: 사용자 선호도 변경 관련...
         - GENERAL_RESPONSE: 일반 대화, 인사, 단순 정보 제공, 질문 답변
         - USER_MESSAGE: 사용자가 보낸 원본 메시지 (분류 불필요)
         - FILTERED_MESSAGE: 부적절한 내용 감지됨 (욕설, 비속어 등)
-        
+
         JSON만 응답:
         {{
             "message_type": "위 6가지 타입 중 하나",
-            "mentioned_plans": ["언급된 요금제명들"],
+            "mentioned_items": {{
+                "plans": ["추천된 요금제명들"],
+                "vass": ["추천된 부가서비스명들"],
+                "coupons": ["추천된 쿠폰명들"]
+            }},
             "has_pricing": true/false,
             "confidence": 0.0-1.0
         }}
@@ -57,13 +63,15 @@ class MessageClassifier:
             # JSON 파싱
             data = json.loads(result)
             llm_type_str = data.get("message_type", "GENERAL_RESPONSE")
-            llm_plans = data.get("mentioned_plans", [])
-            
+            mentioned_items = data.get("mentioned_items", {})
+            all_mentioned = []
+            all_mentioned.extend(mentioned_items.get("plans", []))
+            all_mentioned.extend(mentioned_items.get("vass", []))
+            all_mentioned.extend(mentioned_items.get("coupons", []))
             # 문자열을 MessageType Enum으로 변환
             type_mapping = {
                 "SUGGESTION": MessageType.SUGGESTION,
                 "PREFERENCE_UPDATE": MessageType.PREFERENCE_UPDATE,
-                "PROACTIVE_SUGGESTION": MessageType.PROACTIVE_SUGGESTION,
                 "GENERAL_RESPONSE": MessageType.GENERAL_RESPONSE,
                 "USER_MESSAGE": MessageType.USER_MESSAGE,
                 "FILTERED_MESSAGE": MessageType.FILTERED_MESSAGE,
@@ -75,7 +83,7 @@ class MessageClassifier:
             
             return {
                 "message_type": llm_type,
-                "mentioned_plans": llm_plans,
+                "mentioned_plans": all_mentioned,
                 "confidence": data.get("confidence", 0.8),
                 "has_pricing": data.get("has_pricing", False),
                 "reasoning": "LLM 분석"
